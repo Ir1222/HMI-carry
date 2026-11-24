@@ -1,10 +1,10 @@
 # HMI Loaded-4D Implementation Plan（只读审查版）
 
-审查日期：2026-11-24（按最新请求复核更新）。状态：**供人工审查，尚未实施**。训练指标截止本轮读取的 2026-11-24 17:23:56（Asia/Shanghai），不据日志时间推断当前进程是否仍在运行。
+审查日期：2026-11-24（按最新请求复核更新）。状态：**用户已授权实施；核心实现和CPU协议测试已完成，评估入口正在核验**。训练指标截止本轮读取的 2026-11-24 17:23:56（Asia/Shanghai），不据日志时间推断当前进程是否仍在运行。
 
 技术审查阶段仅读取本地源码、Git 元数据、已有 JSON/YAML/日志与 TensorBoard scalars，并使用 NumPy 检查指定三条 NPZ；未启动 simulator、训练、GPU 实验，未加载大 checkpoint tensor，未安装依赖或修改原始资产。日志可能由用户正在进行的训练继续更新，以下指标与 Git 表格保留审查时快照。
 
-文档维护按用户后续授权执行：在 `HMI_clean` 的 `docs/loaded-4d-plan` 分支跟踪同名报告副本，同时同步保留 `/home/han/pyx/HMI_LOADED_4D_IMPLEMENTATION_PLAN.md`。每次可审查的阶段性修改写入本文修改记录，并在 commit message 中说明修改内容、原因和核验结果。当前仅维护文档；代码实施与训练仍等待正式指令。后续获准实施时，代码工作目录为 `/home/han/pyx/HMI_clean`，核心 Python 路径为 `/home/han/pyx/HMI_clean/src/holosoma/holosoma`；原路径报告与仓库内同名副本继续同步维护。
+文档维护按用户后续授权执行：在 `HMI_clean` 的 `docs/loaded-4d-plan` 分支跟踪同名报告副本，同时同步保留 `/home/han/pyx/HMI_LOADED_4D_IMPLEMENTATION_PLAN.md`。每次可审查的阶段性修改写入本文修改记录，并在 commit message 中说明修改内容、原因和核验结果。用户已进一步明确授权按本计划实施代码、阶段性commit并在结束后push。本轮开展代码实现与CPU验证，尚未启动仿真或训练。代码工作目录为 `/home/han/pyx/HMI_clean`，核心 Python 路径为 `/home/han/pyx/HMI_clean/src/holosoma/holosoma`；原路径报告与仓库内同名副本继续同步维护。
 
 路径约定（下文源码引用均相对于这些已核实的绝对目录）：
 
@@ -362,7 +362,7 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 
 ## 7. File-level Minimal Modification Plan
 
-**本节所有“新增”路径为未来建议，当前不存在；不冒充已审查源码。已有文件以绝对路径列出。** 所有源码修改仅在未来经批准、从clean commit派生的实现分支/工作区进行；本轮在clean仓库仅维护本报告的Git副本。
+**本节保留经审查的文件级设计；用户授权实施后，所列新增文件已在 `feature/loaded-4d` 分支创建，完成状态以§10.2为准。** 原 `main` 与 `docs/loaded-4d-plan` 分支保留对照；源码工作区为 `/home/han/pyx/HMI_clean`。
 
 ### 7.1 必须修改/新增
 
@@ -397,7 +397,7 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 
 ## 8. Implementation and Experiment Sequence
 
-以下均是**未来审查通过后的流程，本轮未执行**。除发现具体失败外不追加大规模消融。
+以下是按依赖排序的实施与实验流程；当前已完成的代码/CPU验证见§10.2。训练、真实物理验收和学习效果不因代码完成而视作通过。除发现具体失败外不追加大规模消融。
 
 | 顺序 | 最小工作 | 通过条件 | 失败时优先诊断 |
 |---|---|---|---|
@@ -444,7 +444,7 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 - **保持不变**：PPO数学、MLP隐藏层、normalizer实现、joint-position action/PD、simulator/framework、motion loaders、上游原preset、URDF/mesh、第三方依赖。保留原始运行入口以做回归对照。
 - **暂不做**：旧HOI状态机、旧PPO子类、自动训练/调度、复杂contact reward、独立curriculum系统、1ms、高PD、delta、history/lookahead、额外motion augmentation。
 
-该范围已达到最小实现的目标：必要差异都能追溯到四维接口、真实自由箱体、reference监督和连续Gen要求。还能删减的是首版自动curriculum、训练中的精细contact shaping与ONNX专用封装；不能再删的是严格command语义、reset/time修复、Gen clip-end隔离、normalizer/输入协议一致性和真实物理评估。审查通过后再实施；后续review意见先同步到本计划及修改记录。
+该范围已达到最小实现的目标：必要差异都能追溯到四维接口、真实自由箱体、reference监督和连续Gen要求。还能删减的是首版自动curriculum、训练中的精细contact shaping与ONNX专用封装；不能再删的是严格command语义、reset/time修复、Gen clip-end隔离、normalizer/输入协议一致性和真实物理评估。用户现已授权代码实施；后续review意见和验证结果继续同步到本计划及修改记录。
 
 
 ### 10.1 持续维护与修改记录
@@ -452,10 +452,23 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 - 更新方式：收到新的实验事实、用户确认或 reviewer 意见后，直接修订相关章节；两个报告路径在同次更新中保持字节一致，避免分别编辑形成不同版本。
 - 提交时机：一个明确的审查结论或修改批次完成并核验后提交；临时草稿可先保留未提交状态。文档提交只 stage 本报告，后续实施提交也仅包含对应任务的已核验改动。
 - 每次提交记录：本文增加简短记录，commit message 使用标题加正文，列明“修改内容、修改原因、核验结果、未完成事项（如有）”。Git commit hash 从历史查询，不把本次尚未生成的 hash 写回同一个 commit。
-- 授权范围：文档分支和本地 commit 已获明确授权；用户随后另行授权将当前代码与计划 push 到 `https://github.com/Ir1222/HMI-carry.git`。首次推送包含原版 `main` 和 `docs/loaded-4d-plan`，使用普通推送，不覆盖远端历史。代码实施与启动训练仍须用户正式指令。
+- 授权范围：文档分支和本地 commit 已获明确授权；用户随后另行授权将当前代码与计划 push 到 `https://github.com/Ir1222/HMI-carry.git`。首次推送包含原版 `main` 和 `docs/loaded-4d-plan`，使用普通推送，不覆盖远端历史。随后用户已正式授权代码实施和结束后push；本轮执行代码与CPU验证，未启动训练。
 
 | 记录 | 日期 | 修改内容与原因 | 核验结果 |
 |---|---|---|---|
 | 审查初稿（纳入Git前） | 2026-11-24 | 完成本地仓库、三NPZ、原版及旧实现审查；形成十章最小修改计划。根据用户补充，将当前原版Object Stage1更新为已通过viewer人工验证 | 本地源码/数据/已有日志只读核对；三NPZ格式与hash检查；原版成功结论注明来自用户观察，未虚构定量成功率 |
 | D001：计划纳入版本管理 | 2026-11-24 | 在用户选定的 `docs/loaded-4d-plan` 分支提交同名报告副本，原路径同步保留；新增持续更新、阶段性commit及每次文字记录规则；将原Git状态明确标记为审查快照，避免与文档分支混淆 | 核对两个副本内容、十个必需章节和Git diff；本提交仅含Markdown报告，无Python/config/NPZ/checkpoint变更；未执行训练或仿真 |
 | D002：明确工作路径与首次推送范围 | 2026-11-24 | 明确后续代码工作区为 `/home/han/pyx/HMI_clean`，计划继续在原路径和仓库内同步；记录用户授权将原版 `main` 与文档分支推送到 HMI-carry，便于远程审查 | 推送前 `ls-remote --heads origin` 无分支；核对origin地址、分支及双副本一致性；本提交仅修改报告。推送完成后核对远端两分支的commit与本地一致，最终结果以Git远端refs为准 |
+| I001：Loaded-4D核心实现 | 2026-11-24 | 在 `feature/loaded-4d` 实现独立command、薄WBT环境和共享Stage1/2 presets；原motion仅提取2个hook；注册4个实验alias，创建5个不可变NPZ相对symlink；新增协议及checkpoint测试 | 17项新CPU测试和28项上游command/preset回归通过；Actor113D/Critic315D由真实ObservationManager计算；原PPO恢复网络/normalizer/optimizer/std测试通过；未启动GPU仿真或训练 |
+
+### 10.2 实施进度与可执行入口
+
+当前实现分支：`feature/loaded-4d`，从已推送文档版本派生。`main` 仍为 `c353731` 原版代码。
+
+已实现：§7的两个共享文件小改动、三个任务模块与协议测试。三个任务模块采用计划中给出的类名；原PPO、MLP、PD、action、motion loaders、simulator和原preset未改。`scripts_run/evaluate_loaded_4d.py` 已创建，完整评估协议仍在本轮核验。
+
+- Runtime默认：200Hz physics / decimation4 / 50Hz policy，原固定中心action；Stage1全Track，Stage2固定50/50；同一113D/315D observation schema。
+- Gen随机目标用0.8s smoothstep、height限速0.06m/s；外部每帧重定向使用连续限速，避免重启smoothstep造成停滞。外部目标与本步applied command分开保存。
+- CPU测试已验证：严格yaw-rate、精确reset、单调step token、Gen越过clip末帧无physical write、外部Gen隔离、实际持箱gate、失败优先于timeout、final observation在reset前捕获、checkpoint迁移保留新分组。
+- `datasets/loaded_4d/joint/` 中3条和 `squat/` 中2条是相对symlink，指向工作区已有旧仓库的指定NPZ；没有复制或修改NPZ。新机器须提供这些原数据并保持布局，或用CLI覆盖 `motion_dir/motion_file` 指向相同hash的数据视图；不自动下载数据。
+- 本轮尚未运行PhysX reset/rollout、短训练、joint训练或Stage2训练。物理阈值、真实接触、1.1kg/inertia和原PD下可学性仍需计划中的后续实验验收。
