@@ -463,20 +463,23 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 | I002：评估入口、从头训练与使用说明 | 2026-11-24 | 完成薄评估工具及CPU数据检查；增加终止前快照/隐藏reset/失败trial测试；按用户要求在现有README加入从头Stage1、smoke、单技能、Stage2迁移和连续评估命令；同步计划 | 最终95项CPU测试通过（20项Loaded测试＋75项上游回归）；真实PPO constructor/setup确认Stage1无checkpoint也可初始化、iter0/空optimizer/新normalizers/std1.0；README五条训练命令实际Tyro解析通过；三NPZ hash/fps/联合分布复核通过；未运行仿真或训练 |
 | I003：修复原版与Loaded-4D共用Viser入口 | 2026-11-25 | 用户反馈网页无法打开，并确认原版复现评估也曾遇到相同错误。定位Isaac Sim的pip_prebundle内websockets12.0遮蔽runtime已安装15.0.1；在`eval_agent.run_eval_with_tyro`启用Viser时，于simulation setup之前导入Viser，依赖缺失提前报错；补3项启动回归和README逐motion查看命令 | CPU子进程复现原`No module named websockets.asyncio`；提前导入后通过；3项新测试＋15项原Viser测试共18项通过；注入真实Isaac bundle路径后，临时回环Viser服务HTTP200及带版本subprotocol的WebSocket收包通过；未启动Isaac/GPU仿真，未修改依赖、训练代码、reference或checkpoint。完整Isaac viewer仍待用户重试 |
 | I004：修复量化评估跨trial重置及异常可见性 | 2026-11-25 | 用户运行`evaluate_loaded_4d.py --mode track --trials 10`，加载成功后仅见shutdown日志且无结果JSON。CPU复现脚本中的确定缺陷：rollout的`torch.inference_mode()`使真实TerminationManager持有inference tensor，下一trial在context外reset原地修改报错；改用上游eval同样的`torch.no_grad()`。增加逐trial进度、结果输出，并在Isaac cleanup前打印flush原始traceback；同步README | 新增Track/Gen连续trial测试先在旧代码上均复现第二trial reset的RuntimeError，修复后连同异常输出顺序测试及原Loaded测试共23项通过。未修改训练/manager实现/物理/数据/模型；未运行GPU评估。本次用户日志未包含原始traceback，因此不声称已排除其他运行时问题，真实30trial结果待重新执行 |
+| D003：保存用户确认可用的三reference查看流程 | 2026-11-25 | 用户确认先设置`MOTION_ID=0/1/2`再执行完整Viser命令，可分别查看同一个joint policy的三条reference表现；README写入当前run/checkpoint、环境激活、完整变量化viewer命令、ID表和切换步骤，并为主要训练/量化评估命令补齐每次新终端的环境准备；更新验证状态 | README shell代码块语法核验，真实checkpoint配置上的三个motion ID命令仅解析验证；两个计划副本同步。仅文档修改，不启动训练或仿真。实际viewer可用来自用户确认，不扩展为量化成功率或全部控制能力已验收 |
 
 ### 10.2 实施进度与可执行入口
 
 当前实现分支：`feature/loaded-4d`，从已推送文档版本派生。`main` 仍为 `c353731` 原版代码。
 
-已实现：§7的两个共享文件小改动、三个任务模块与协议测试。三个任务模块采用计划中给出的类名；原PPO、MLP、PD、action、motion loaders、simulator和原preset未改。`scripts_run/evaluate_loaded_4d.py` 已完成，CPU测试覆盖首次失败停止、隐藏reset检测及终止前快照；真实checkpoint的PhysX评估尚未运行。
+已实现：§7的两个共享文件小改动、三个任务模块与协议测试。三个任务模块采用计划中给出的类名；原PPO、MLP、PD、action、motion loaders、simulator和原preset未改。`scripts_run/evaluate_loaded_4d.py` 已完成，CPU测试覆盖首次失败停止、隐藏reset检测及终止前快照。用户已运行真实checkpoint的Viser查看；三reference量化完成率尚未取得。
 
 2026-11-25追加：用户已自行启动joint Stage1，run为`/home/han/pyx/HMI_clean_runs/loaded_4d/stage1/WholeBodyTracking/20261124_105123-g1_loaded_4d_stage1_joint-locomotion`。保存配置与train.log确认加载3条motion；末尾`-locomotion`不代表单技能。已有编号checkpoint至`model_06000.pt`（本次只读快照），用户评估日志确认113D/315D模型加载成功；viewer依赖失败不构成训练失败或reference初始化错误的证据。评估配置的`motion_id=1/local_frame=0`确为行走起点。I003修复共用入口，单独补充CPU启动测试；Stage1物理效果仍须实际viewer及量化评估确认。
+
+随后用户明确确认：I003修复后的完整Viser命令可用，分别设置`MOTION_ID=0`、`1`、`2`可查看三条reference下的policy。D003据此保存可复用操作流程；该确认解决浏览器查看可用性问题，未提供定量误差、完整episode成功率或Stage2泛化结果，不将其写为全部训练目标已完成。
 
 - Runtime默认：200Hz physics / decimation4 / 50Hz policy，原固定中心action；Stage1全Track，Stage2固定50/50；同一113D/315D observation schema。
 - Gen随机目标用0.8s smoothstep、height限速0.06m/s；外部每帧重定向使用连续限速，避免重启smoothstep造成停滞。外部目标与本步applied command分开保存。
 - CPU测试已验证：严格yaw-rate、精确reset、单调step token、Gen越过clip末帧无physical write、外部Gen隔离、实际持箱gate、失败优先于timeout、final observation在reset前捕获、checkpoint迁移保留新分组。
 - `datasets/loaded_4d/joint/` 中3条和 `squat/` 中2条是相对symlink，指向工作区已有旧仓库的指定NPZ；没有复制或修改NPZ。新机器须提供这些原数据并保持布局，或用CLI覆盖 `motion_dir/motion_file` 指向相同hash的数据视图；不自动下载数据。
-- 本轮尚未运行PhysX reset/rollout、短训练、joint训练或Stage2训练。物理阈值、真实接触、1.1kg/inertia和原PD下可学性仍需计划中的后续实验验收。
+- 2026-11-24实施阶段由本助手仅执行CPU验证；之后用户已运行joint Stage1及三reference的Viser查看。物理阈值、真实接触、1.1kg/inertia、量化tracking和Stage2泛化仍按计划验收。
 
 
 最终验证与运行入口：
