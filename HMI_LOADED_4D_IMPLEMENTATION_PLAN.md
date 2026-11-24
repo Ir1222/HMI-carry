@@ -4,7 +4,7 @@
 
 技术审查阶段仅读取本地源码、Git 元数据、已有 JSON/YAML/日志与 TensorBoard scalars，并使用 NumPy 检查指定三条 NPZ；未启动 simulator、训练、GPU 实验，未加载大 checkpoint tensor，未安装依赖或修改原始资产。日志可能由用户正在进行的训练继续更新，以下指标与 Git 表格保留审查时快照。
 
-文档维护按用户后续授权执行：在 `HMI_clean` 的 `docs/loaded-4d-plan` 分支跟踪同名报告副本，同时同步保留 `/home/han/pyx/HMI_LOADED_4D_IMPLEMENTATION_PLAN.md`。每次可审查的阶段性修改写入本文修改记录，并在 commit message 中说明修改内容、原因和核验结果。当前仅维护文档；代码实施与训练仍等待正式指令。
+文档维护按用户后续授权执行：在 `HMI_clean` 的 `docs/loaded-4d-plan` 分支跟踪同名报告副本，同时同步保留 `/home/han/pyx/HMI_LOADED_4D_IMPLEMENTATION_PLAN.md`。每次可审查的阶段性修改写入本文修改记录，并在 commit message 中说明修改内容、原因和核验结果。当前仅维护文档；代码实施与训练仍等待正式指令。后续获准实施时，代码工作目录为 `/home/han/pyx/HMI_clean`，核心 Python 路径为 `/home/han/pyx/HMI_clean/src/holosoma/holosoma`；原路径报告与仓库内同名副本继续同步维护。
 
 路径约定（下文源码引用均相对于这些已核实的绝对目录）：
 
@@ -45,7 +45,7 @@
 
 `HMI_clean` 当前 origin 的 fetch/push URL 均为 **`https://github.com/Ir1222/HMI-carry.git`**，是此前按用户明确指令完成的 remote-only 修改；本轮没有修改 Git 配置。源码仍是原上游 `https://github.com/jiashunwang/Hybrid-Motion-Imitation` 的固定 commit，工作区clean、HEAD detached。`remote -v` 当前没有单独的 upstream remote。
 
-本地 branches/ref：`main=c353731`、`origin/main=c353731`、`origin/locomotion=f89b379`、`origin/three-point-track=5e01bfc`。这些 `origin/*` refs 是修改 URL 前遗留的本地缓存；未 fetch，**不能用它们证明新 HMI-carry 远程已经存在对应 branches/commits**。原审查阶段未 checkout、commit、push 或 fetch；随后仅按追加授权建立文档分支并提交报告，记录见§10.1。未来推送目标仍为用户指定的 HMI-carry；本次不执行 push。
+本地 branches/ref：`main=c353731`、`origin/main=c353731`、`origin/locomotion=f89b379`、`origin/three-point-track=5e01bfc`。这些 `origin/*` refs 是修改 URL 前遗留的本地缓存；未 fetch，**不能用它们证明新 HMI-carry 远程已经存在对应 branches/commits**。原审查阶段未 checkout、commit、push 或 fetch；随后仅按追加授权建立文档分支并提交报告，记录见§10.1。推送目标为用户指定的 HMI-carry。D001仅完成本地提交；用户随后明确授权首次推送，范围为原版代码的 `main` 与包含本报告的 `docs/loaded-4d-plan`，记录见D002。
 
 旧仓库 origin 为 `https://github.com/Ir1222/carry_baseline.git`，另有 upstream 指向原 HMI。已有本地 branches：
 
@@ -452,9 +452,10 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 - 更新方式：收到新的实验事实、用户确认或 reviewer 意见后，直接修订相关章节；两个报告路径在同次更新中保持字节一致，避免分别编辑形成不同版本。
 - 提交时机：一个明确的审查结论或修改批次完成并核验后提交；临时草稿可先保留未提交状态。文档提交只 stage 本报告，后续实施提交也仅包含对应任务的已核验改动。
 - 每次提交记录：本文增加简短记录，commit message 使用标题加正文，列明“修改内容、修改原因、核验结果、未完成事项（如有）”。Git commit hash 从历史查询，不把本次尚未生成的 hash 写回同一个 commit。
-- 授权范围：文档分支和本地 commit 已获明确授权；本约定不代表批准源码实施、启动训练或 push。将来实施仍须用户正式指令。
+- 授权范围：文档分支和本地 commit 已获明确授权；用户随后另行授权将当前代码与计划 push 到 `https://github.com/Ir1222/HMI-carry.git`。首次推送包含原版 `main` 和 `docs/loaded-4d-plan`，使用普通推送，不覆盖远端历史。代码实施与启动训练仍须用户正式指令。
 
 | 记录 | 日期 | 修改内容与原因 | 核验结果 |
 |---|---|---|---|
 | 审查初稿（纳入Git前） | 2026-11-24 | 完成本地仓库、三NPZ、原版及旧实现审查；形成十章最小修改计划。根据用户补充，将当前原版Object Stage1更新为已通过viewer人工验证 | 本地源码/数据/已有日志只读核对；三NPZ格式与hash检查；原版成功结论注明来自用户观察，未虚构定量成功率 |
 | D001：计划纳入版本管理 | 2026-11-24 | 在用户选定的 `docs/loaded-4d-plan` 分支提交同名报告副本，原路径同步保留；新增持续更新、阶段性commit及每次文字记录规则；将原Git状态明确标记为审查快照，避免与文档分支混淆 | 核对两个副本内容、十个必需章节和Git diff；本提交仅含Markdown报告，无Python/config/NPZ/checkpoint变更；未执行训练或仿真 |
+| D002：明确工作路径与首次推送范围 | 2026-11-24 | 明确后续代码工作区为 `/home/han/pyx/HMI_clean`，计划继续在原路径和仓库内同步；记录用户授权将原版 `main` 与文档分支推送到 HMI-carry，便于远程审查 | 推送前 `ls-remote --heads origin` 无分支；核对origin地址、分支及双副本一致性；本提交仅修改报告。推送完成后核对远端两分支的commit与本地一致，最终结果以Git远端refs为准 |
