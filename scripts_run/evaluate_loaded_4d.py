@@ -16,6 +16,8 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import sys
+import traceback
 
 import numpy as np
 import torch
@@ -112,7 +114,10 @@ def run_trial(env, algo, *, mode, steps, sequence, stochastic, seed, transition_
     outcome = 'horizon_complete' if mode == 'gen' else 'incomplete'
     last_segment, segment_start, hidden_reset = -1, 0, False
     termination_names = []
-    with torch.inference_mode():
+    # Managers retain tensors created during step(), then mutate them in the
+    # next trial's reset_all(). Inference tensors forbid that outside their
+    # context; use the same no-grad policy as upstream PPO.evaluate_policy.
+    with torch.no_grad():
         for step in range(steps):
             segment = min(len(sequence) - 1, step * len(sequence) // steps)
             if mode == 'gen' and segment != last_segment:
@@ -224,11 +229,15 @@ def evaluate(args):
                     enabled=True, motion_id=motion_id, local_frame=frame))
                 steps = length - 1 - frame if args.mode == 'track' else math.ceil(args.seconds / env.dt)
                 for trial in range(args.trials):
+                    print(f'[{args.mode}] motion={cmd.motion_names[motion_id]} start_frame={frame} '
+                          f'trial={trial + 1}/{args.trials}', flush=True)
                     result = run_trial(env, algo, mode=args.mode, steps=steps, sequence=sequence,
                         stochastic=args.stochastic, seed=args.seed + trial,
                         transition_exclusion_s=args.transition_exclusion_s)
                     result.update(motion=cmd.motion_names[motion_id], start_frame=frame)
                     trials.append(result)
+                    print(f"  outcome={result['outcome']} seconds={result['seconds']:.2f} "
+                          f"termination_terms={result['termination_terms']}", flush=True)
         complete = sum(row['outcome'] in ('clip_complete', 'horizon_complete') for row in trials)
         summary = {'checkpoint': str(checkpoint), 'checkpoint_iteration': algo.current_learning_iteration,
             'mode': args.mode, 'stochastic': args.stochastic, 'observation_noise': 'preserved training schema',
@@ -237,7 +246,13 @@ def evaluate(args):
             'interpretation': 'Completion is separate from command accuracy; no hand-contact or convergence claim.'}
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(json_safe(summary), indent=2, allow_nan=False) + '\n')
-        print(f'Saved {len(trials)} trials to {args.output}; completion={complete}/{len(trials)}')
+        print(f'Saved {len(trials)} trials to {args.output}; completion={complete}/{len(trials)}', flush=True)
+    except Exception:
+        # Kit shutdown may terminate Python before an uncaught exception is
+        # printed. Emit and flush it before entering simulator cleanup.
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
     finally:
         if algo is not None:
             algo.writer.close()

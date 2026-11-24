@@ -180,6 +180,12 @@ python scripts_run/evaluate_loaded_4d.py \
   --output /home/han/pyx/HMI_clean_runs/loaded_4d/eval_stage1/results.json
 ```
 
+脚本逐条打印 motion、起始帧、trial 编号、结果和 termination terms；上述 joint 配置共30个
+trial，全部结束并写入JSON后打印 `Saved 30 trials to ...`。仅看到
+`Shutting down simulation app` 不代表评估完成。当前脚本在关闭Isaac之前打印并刷新原始异常，
+避免shutdown过程掩盖报错；多trial使用`torch.no_grad()`，避免前一trial生成的inference tensor
+在下一次reset时触发原地修改错误。若需要留存终端日志，可在命令末尾加 `2>&1 | tee /tmp/loaded_4d_eval.log`。
+
 可加 `--start-frames 0 25 50` 检查多个 RSI 起点，或 `--motion-id 0` 选择 clip
 （ID 按 loader 的文件名字母序排列）。`--stochastic` 使用 learned exploration std；
 默认使用 policy mean，并保持训练时的 observation noise 配置和冻结的 normalizers。

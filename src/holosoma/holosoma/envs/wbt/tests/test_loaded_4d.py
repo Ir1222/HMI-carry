@@ -523,6 +523,88 @@ def test_evaluation_detects_unreported_physical_reset(evaluation_module):
     assert result['steps'] == 1
 
 
+@pytest.mark.parametrize('mode', ['track', 'gen'])
+def test_evaluation_repeated_trials_reset_real_termination_manager(evaluation_module, mode):
+    from holosoma.config_types.termination import TerminationManagerCfg, TerminationTermCfg
+    from holosoma.managers.termination.manager import TerminationManager
+
+    cmd = SimpleNamespace(physical_reset_count=torch.zeros(1, dtype=torch.long), set_command=Mock())
+    env = SimpleNamespace(num_envs=1, device='cpu', dt=.02,
+        episode_length_buf=torch.zeros(1, dtype=torch.long), max_episode_length=0 if mode == 'track' else 100,
+        command_manager=SimpleNamespace(get_state=lambda name: cmd))
+    env.termination_manager = TerminationManager(TerminationManagerCfg(terms={
+        'clip_end': TerminationTermCfg(
+            func='holosoma.managers.termination.terms.common:timeout_exceeded', is_timeout=True),
+    }), env, 'cpu')
+
+    def reset():
+        env.termination_manager.reset(torch.tensor([0]))
+        env.episode_length_buf.zero_()
+        cmd.physical_reset_count.zero_()
+        return {'actor_obs': torch.zeros(1, 113)}
+
+    def step(state):
+        env.episode_length_buf += 1
+        failures, timeouts = env.termination_manager.check()
+        dones = failures | timeouts
+        snapshot = {'measured': torch.zeros(1, 4), 'applied_command': torch.zeros(1, 4),
+            'target_command': torch.zeros(1, 4), 'body_position_error': torch.zeros(1),
+            'object_position_error': torch.zeros(1), 'box_clearance': torch.ones(1),
+            'reference_frame': env.episode_length_buf.clone(), 'clip_finished': timeouts.clone()}
+        if dones.any():
+            # Match BaseTask's automatic terminal reset, inside the rollout context.
+            env.termination_manager.reset(torch.tensor([0]))
+            cmd.physical_reset_count += 1
+        return {'actor_obs': torch.zeros(1, 113)}, torch.zeros(1), dones, {
+            'loaded_4d': snapshot, 'time_outs': timeouts}
+
+    def policy(obs):
+        assert not torch.is_grad_enabled()
+        return torch.zeros(1, 29)
+
+    env.reset_all, env.step = reset, step
+    algo = SimpleNamespace(actor_obs_keys=['actor_obs'], get_inference_policy=lambda: policy)
+    for trial in range(3):
+        result = evaluation_module.run_trial(env, algo, mode=mode, steps=2,
+            sequence=[[0., 0., 0., .7]], stochastic=False, seed=trial, transition_exclusion_s=0.)
+        assert result['outcome'] == ('clip_complete' if mode == 'track' else 'horizon_complete')
+        assert result['physical_resets_after_initial'] == (1 if mode == 'track' else 0)
+
+
+def test_evaluation_prints_original_error_before_simulator_cleanup(evaluation_module, monkeypatch, capsys, tmp_path):
+    from holosoma.utils import eval_utils, sim_utils
+
+    cfg = loaded_4d_preset(stage=1)
+    term = cfg.command.setup_terms['motion_command']
+    term = replace(term, params={**term.params, 'motion_config': asdict(term.params['motion_config'])})
+    cfg = replace(cfg, command=replace(cfg.command, setup_terms={'motion_command': term}))
+    payload = {key: {} for key in ('actor_model_state_dict', 'critic_model_state_dict',
+        'actor_obs_normalizer_state_dict', 'critic_obs_normalizer_state_dict')}
+    payload['env_state'] = {'loaded_4d_contract': 'test'}
+    monkeypatch.setattr(evaluation_module.torch, 'load', lambda *args, **kwargs: payload)
+    monkeypatch.setattr(eval_utils, 'load_saved_experiment_config', lambda *args: (cfg, None))
+
+    def fail():
+        raise RuntimeError('original evaluation error')
+
+    app = object()
+    env = SimpleNamespace(set_is_evaluating=fail)
+    monkeypatch.setattr(sim_utils, 'setup_simulation_environment', lambda cfg: (env, 'cpu', app))
+    cleaned = []
+
+    def close(received_app):
+        assert received_app is app
+        assert 'RuntimeError: original evaluation error' in capsys.readouterr().err
+        cleaned.append(True)
+
+    monkeypatch.setattr(sim_utils, 'close_simulation_app', close)
+    args = SimpleNamespace(checkpoint=str(tmp_path / 'model.pt'), mode='track', viewer=False,
+        seed=0, seconds=60., output=tmp_path / 'results.json')
+    with pytest.raises(RuntimeError, match='original evaluation error'):
+        evaluation_module.evaluate(args)
+    assert cleaned == [True]
+
+
 def test_stage1_starts_fresh_without_checkpoint_or_optimizer_state(make_command, tmp_path):
     from holosoma.agents.ppo.ppo import PPO
 
