@@ -184,6 +184,38 @@ python scripts_run/evaluate_loaded_4d.py \
 （ID 按 loader 的文件名字母序排列）。`--stochastic` 使用 learned exploration std；
 默认使用 policy mean，并保持训练时的 observation noise 配置和冻结的 normalizers。
 
+浏览器 Viser 可逐条查看同一个 joint policy。下面从行走的 frame 0 初始化；
+将 checkpoint 路径替换为实际文件，启动后打开 `http://localhost:8012`：
+
+```bash
+python src/holosoma/holosoma/eval_agent.py \
+  --checkpoint=/absolute/path/to/loaded_4d_stage1/model_06000.pt \
+  --viser.config.enabled \
+  --viser.config.port=8012 \
+  --viser.config.num-envs=1 \
+  --training.num-envs=1 \
+  --training.headless=True \
+  --training.max-eval-steps=30000 \
+  --training.export-onnx=False \
+  --logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/eval_viewer \
+  --command.setup-terms.motion-command.params.motion-config.hybrid.track-ratio=1.0 \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.enabled=True \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.motion-id=1 \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.bin-id=None \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.local-frame=0 \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.randomize-within-bin=False
+```
+
+joint 的 ID 为 `0=continuous_grasped_squat_stand`、`1=loaded_locomotion`、
+`2=repeated_grasped_squat_stand`。只改 `motion-id`，保留 checkpoint 的 joint 数据集合。
+蓝色为 reference，实际机器人由 policy 控制；失败或 clip 结束都会 reset，量化完成率应使用
+上面的 `evaluate_loaded_4d.py`。训练中的 `model.pt` 会持续更新，比较时优先用编号 checkpoint。
+
+若曾遇到 `[Viser] Not available (No module named 'websockets.asyncio')`，本机 Isaac Sim
+自带 `websockets 12.0` 会遮蔽已安装的 `15.0.1`。当前 `eval_agent.py` 在启用 Viser 时，
+会在启动 simulator 前导入 Viser，避免该冲突；适用于原版和 Loaded-4D checkpoint。
+更新代码后重新启动评估进程即可，正在运行的训练不需要重启，也不需要为此升级依赖。
+
 60 s 连续 Gen 指令评估，包含站立、前后/侧向、转弯、蹲起及组合：
 
 ```bash

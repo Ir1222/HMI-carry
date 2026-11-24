@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from importlib import import_module
 
 import tyro
 from loguru import logger
@@ -104,6 +105,17 @@ def run_eval_with_tyro(
     saved_wandb_path: str | None,
     eval_cbs_cfg: EvalCallbacksConfig | None = None,
 ):
+    # Isaac Sim prepends bundled packages (including websockets 12) to sys.path.
+    # Viser needs websockets.asyncio from the installed newer version. Resolve
+    # its dependencies before starting Kit, only when the web viewer is enabled.
+    if eval_cbs_cfg is not None and eval_cbs_cfg.viser.config.enabled:
+        try:
+            import_module("viser")
+        except ImportError as exc:
+            raise RuntimeError(
+                "Cannot import Viser before simulator startup; check the evaluation Python environment."
+            ) from exc
+
     # Use shared simulation environment setup
     env, device, simulation_app = setup_simulation_environment(tyro_config)
 

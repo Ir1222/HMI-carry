@@ -461,12 +461,15 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 | D002：明确工作路径与首次推送范围 | 2026-11-24 | 明确后续代码工作区为 `/home/han/pyx/HMI_clean`，计划继续在原路径和仓库内同步；记录用户授权将原版 `main` 与文档分支推送到 HMI-carry，便于远程审查 | 推送前 `ls-remote --heads origin` 无分支；核对origin地址、分支及双副本一致性；本提交仅修改报告。推送完成后核对远端两分支的commit与本地一致，最终结果以Git远端refs为准 |
 | I001：Loaded-4D核心实现 | 2026-11-24 | 在 `feature/loaded-4d` 实现独立command、薄WBT环境和共享Stage1/2 presets；原motion仅提取2个hook；注册4个实验alias，创建5个不可变NPZ相对symlink；新增协议及checkpoint测试 | 17项新CPU测试和28项上游command/preset回归通过；Actor113D/Critic315D由真实ObservationManager计算；原PPO恢复网络/normalizer/optimizer/std测试通过；未启动GPU仿真或训练 |
 | I002：评估入口、从头训练与使用说明 | 2026-11-24 | 完成薄评估工具及CPU数据检查；增加终止前快照/隐藏reset/失败trial测试；按用户要求在现有README加入从头Stage1、smoke、单技能、Stage2迁移和连续评估命令；同步计划 | 最终95项CPU测试通过（20项Loaded测试＋75项上游回归）；真实PPO constructor/setup确认Stage1无checkpoint也可初始化、iter0/空optimizer/新normalizers/std1.0；README五条训练命令实际Tyro解析通过；三NPZ hash/fps/联合分布复核通过；未运行仿真或训练 |
+| I003：修复原版与Loaded-4D共用Viser入口 | 2026-11-25 | 用户反馈网页无法打开，并确认原版复现评估也曾遇到相同错误。定位Isaac Sim的pip_prebundle内websockets12.0遮蔽runtime已安装15.0.1；在`eval_agent.run_eval_with_tyro`启用Viser时，于simulation setup之前导入Viser，依赖缺失提前报错；补3项启动回归和README逐motion查看命令 | CPU子进程复现原`No module named websockets.asyncio`；提前导入后通过；3项新测试＋15项原Viser测试共18项通过；注入真实Isaac bundle路径后，临时回环Viser服务HTTP200及带版本subprotocol的WebSocket收包通过；未启动Isaac/GPU仿真，未修改依赖、训练代码、reference或checkpoint。完整Isaac viewer仍待用户重试 |
 
 ### 10.2 实施进度与可执行入口
 
 当前实现分支：`feature/loaded-4d`，从已推送文档版本派生。`main` 仍为 `c353731` 原版代码。
 
 已实现：§7的两个共享文件小改动、三个任务模块与协议测试。三个任务模块采用计划中给出的类名；原PPO、MLP、PD、action、motion loaders、simulator和原preset未改。`scripts_run/evaluate_loaded_4d.py` 已完成，CPU测试覆盖首次失败停止、隐藏reset检测及终止前快照；真实checkpoint的PhysX评估尚未运行。
+
+2026-11-25追加：用户已自行启动joint Stage1，run为`/home/han/pyx/HMI_clean_runs/loaded_4d/stage1/WholeBodyTracking/20261124_105123-g1_loaded_4d_stage1_joint-locomotion`。保存配置与train.log确认加载3条motion；末尾`-locomotion`不代表单技能。已有编号checkpoint至`model_06000.pt`（本次只读快照），用户评估日志确认113D/315D模型加载成功；viewer依赖失败不构成训练失败或reference初始化错误的证据。评估配置的`motion_id=1/local_frame=0`确为行走起点。I003修复共用入口，单独补充CPU启动测试；Stage1物理效果仍须实际viewer及量化评估确认。
 
 - Runtime默认：200Hz physics / decimation4 / 50Hz policy，原固定中心action；Stage1全Track，Stage2固定50/50；同一113D/315D observation schema。
 - Gen随机目标用0.8s smoothstep、height限速0.06m/s；外部每帧重定向使用连续限速，避免重启smoothstep造成停滞。外部目标与本步applied command分开保存。
