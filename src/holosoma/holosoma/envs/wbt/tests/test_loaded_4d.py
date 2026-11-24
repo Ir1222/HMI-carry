@@ -254,6 +254,11 @@ def test_presets_preserve_upstream_and_share_stage_interface():
     assert asdict(one.observation) == asdict(two.observation)
     assert asdict(one.action) == asdict(two.action)
     assert asdict(one.robot.control) == asdict(two.robot.control)
+    from holosoma.envs.wbt.config_utils import apply_wbt_robot_defaults
+    original_runtime = apply_wbt_robot_defaults(g1_29dof_wbt_hybrid_object)
+    assert asdict(one.robot.control) == asdict(original_runtime.robot.control)
+    assert one.robot.asset.enable_self_collisions == original_runtime.robot.asset.enable_self_collisions
+    assert one.robot.init_state.pos == original_runtime.robot.init_state.pos
     assert asdict(one.algo) == asdict(two.algo)
     assert one.algo.config.empirical_normalization
     assert not two.algo.config.reset_policy_std_on_resume
@@ -454,3 +459,95 @@ def test_full_environment_callback_preserves_terminal_obs_before_reset(make_comm
     final = task.extras['final_observations']['critic_obs']
     current = task.obs_buf_dict['critic_obs']
     assert not torch.equal(final, current)
+
+
+@pytest.fixture
+def evaluation_module():
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[6] / 'scripts_run' / 'evaluate_loaded_4d.py'
+    spec = importlib.util.spec_from_file_location('evaluate_loaded_4d', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_evaluation_stops_at_first_failure_and_retains_pre_reset_measurement(evaluation_module):
+    cmd = SimpleNamespace(physical_reset_count=torch.ones(1, dtype=torch.long), set_command=Mock())
+    step_count = [0]
+    def reset():
+        cmd.physical_reset_count[:] = 1
+        return {'actor_obs': torch.zeros(1, 113)}
+    snapshot = {
+        'measured': torch.tensor([[.5, 0., 0., .7]]),
+        'applied_command': torch.tensor([[.1, 0., 0., .7]]),
+        'target_command': torch.tensor([[.1, 0., 0., .7]]),
+        'body_position_error': torch.tensor([.05]), 'object_position_error': torch.tensor([.1]),
+        'box_clearance': torch.tensor([-.02]), 'reference_frame': torch.tensor([4]),
+        'clip_finished': torch.tensor([False]),
+    }
+    def step(state):
+        step_count[0] += 1
+        cmd.physical_reset_count += 1
+        return {'actor_obs': torch.zeros(1, 113)}, torch.zeros(1), torch.ones(1, dtype=torch.long), {
+            'loaded_4d': snapshot, 'time_outs': torch.tensor([False])}
+    env = SimpleNamespace(reset_all=reset, step=step, dt=.02,
+        command_manager=SimpleNamespace(get_state=lambda name: cmd),
+        termination_manager=SimpleNamespace(last_term_results={'physical_failure': torch.tensor([True])}))
+    algo = SimpleNamespace(actor_obs_keys=['actor_obs'], get_inference_policy=lambda: lambda obs: torch.zeros(1, 29))
+    result = evaluation_module.run_trial(env, algo, mode='gen', steps=3000,
+        sequence=[[.1, 0., 0., .7]], stochastic=False, seed=0, transition_exclusion_s=0.)
+    assert result['outcome'] == 'terminated'
+    assert result['steps'] == step_count[0] == 1
+    assert result['command_errors_all']['mae'][0] == pytest.approx(.4)
+    assert result['physical_resets_after_initial'] == 1
+    assert result['termination_terms'] == ['physical_failure']
+    assert evaluation_module.json_safe({'bad': float('nan')}) == {'bad': None}
+
+
+def test_evaluation_detects_unreported_physical_reset(evaluation_module):
+    cmd = SimpleNamespace(physical_reset_count=torch.zeros(1, dtype=torch.long), set_command=Mock())
+    snapshot = {'measured': torch.zeros(1, 4), 'applied_command': torch.zeros(1, 4),
+        'target_command': torch.zeros(1, 4), 'body_position_error': torch.zeros(1),
+        'object_position_error': torch.zeros(1), 'box_clearance': torch.ones(1),
+        'reference_frame': torch.zeros(1, dtype=torch.long)}
+    def step(state):
+        cmd.physical_reset_count += 1
+        return {'actor_obs': torch.zeros(1, 113)}, torch.zeros(1), torch.zeros(1), {'loaded_4d': snapshot}
+    env = SimpleNamespace(reset_all=lambda: {'actor_obs': torch.zeros(1, 113)}, step=step, dt=.02,
+        command_manager=SimpleNamespace(get_state=lambda name: cmd))
+    algo = SimpleNamespace(actor_obs_keys=['actor_obs'], get_inference_policy=lambda: lambda obs: torch.zeros(1, 29))
+    result = evaluation_module.run_trial(env, algo, mode='gen', steps=10,
+        sequence=[[0., 0., 0., .7]], stochastic=False, seed=0, transition_exclusion_s=0.)
+    assert result['outcome'] == 'hidden_reset' and result['hidden_reset']
+    assert result['steps'] == 1
+
+
+def test_stage1_starts_fresh_without_checkpoint_or_optimizer_state(make_command, tmp_path):
+    from holosoma.agents.ppo.ppo import PPO
+
+    for variant in ('joint', 'locomotion', 'squat'):
+        cfg = loaded_4d_preset(stage=1, data=variant)
+        assert cfg.training.checkpoint is None
+        assert cfg.command.setup_terms['motion_command'].params['motion_config'].hybrid.track_ratio == 1.0
+    cmd, env, cfg = make_command(1)
+    env.observation_manager = ObservationManager(cfg.observation, env, 'cpu')
+    env.reset_all = env.observation_manager.compute
+    old_threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    algo = None
+    try:
+        # Exercise the actual upstream constructor/setup, not a checkpoint stub.
+        algo = PPO(env, cfg.algo.config, log_dir=str(tmp_path), device='cpu')
+        algo.setup()
+        assert algo.load(None) is None
+        assert algo.current_learning_iteration == 0
+        assert not algo.actor_optimizer.state and not algo.critic_optimizer.state
+        assert algo.actor_obs_normalizer.count == 0
+        assert algo.critic_obs_normalizer.count == 0
+        assert torch.equal(algo.actor.std, torch.ones(29))
+        assert cmd.track_env_mask.all()
+    finally:
+        if algo is not None:
+            algo.writer.close()
+        torch.set_num_threads(old_threads)

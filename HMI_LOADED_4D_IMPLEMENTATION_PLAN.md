@@ -1,10 +1,10 @@
-# HMI Loaded-4D Implementation Plan（只读审查版）
+# HMI Loaded-4D Implementation Plan（审查与实施记录）
 
-审查日期：2026-11-24（按最新请求复核更新）。状态：**用户已授权实施；核心实现和CPU协议测试已完成，评估入口正在核验**。训练指标截止本轮读取的 2026-11-24 17:23:56（Asia/Shanghai），不据日志时间推断当前进程是否仍在运行。
+审查日期：2026-11-24（按最新请求复核更新）。状态：**最小代码实现、README训练指令及CPU验证已完成；真实物理与训练验收尚未执行**。训练指标截止本轮读取的 2026-11-24 17:23:56（Asia/Shanghai），不据日志时间推断当前进程是否仍在运行。
 
 技术审查阶段仅读取本地源码、Git 元数据、已有 JSON/YAML/日志与 TensorBoard scalars，并使用 NumPy 检查指定三条 NPZ；未启动 simulator、训练、GPU 实验，未加载大 checkpoint tensor，未安装依赖或修改原始资产。日志可能由用户正在进行的训练继续更新，以下指标与 Git 表格保留审查时快照。
 
-文档维护按用户后续授权执行：在 `HMI_clean` 的 `docs/loaded-4d-plan` 分支跟踪同名报告副本，同时同步保留 `/home/han/pyx/HMI_LOADED_4D_IMPLEMENTATION_PLAN.md`。每次可审查的阶段性修改写入本文修改记录，并在 commit message 中说明修改内容、原因和核验结果。用户已进一步明确授权按本计划实施代码、阶段性commit并在结束后push。本轮开展代码实现与CPU验证，尚未启动仿真或训练。代码工作目录为 `/home/han/pyx/HMI_clean`，核心 Python 路径为 `/home/han/pyx/HMI_clean/src/holosoma/holosoma`；原路径报告与仓库内同名副本继续同步维护。
+文档维护按用户后续授权执行：最初在 `HMI_clean` 的 `docs/loaded-4d-plan` 分支跟踪同名报告，当前最新代码与报告位于 `feature/loaded-4d` 分支，同时同步保留 `/home/han/pyx/HMI_LOADED_4D_IMPLEMENTATION_PLAN.md`。每次可审查的阶段性修改写入本文修改记录，并在 commit message 中说明修改内容、原因和核验结果。用户已进一步明确授权按本计划实施代码、阶段性commit并在结束后push。本轮开展代码实现与CPU验证，尚未启动仿真或训练。代码工作目录为 `/home/han/pyx/HMI_clean`，核心 Python 路径为 `/home/han/pyx/HMI_clean/src/holosoma/holosoma`；原路径报告与仓库内同名副本继续同步维护。
 
 路径约定（下文源码引用均相对于这些已核实的绝对目录）：
 
@@ -101,7 +101,7 @@
 
 两者实际配置均为2 envs、Track1.0、原movebox、max_eval_steps10000、physics200/decimation4、evaluation horizon100000s、关闭video recording；各只有YAML和88-byte event文件，event tags无scalar/tensor/图像记录。这些文件本身只能证明evaluation初始化，未保存完成指标；**用户另行确认了当前训练结果的 viewer 验证成功**，该观察作为独立证据纳入。YAML中的 `training.checkpoint=None` 也不能反推“没有加载checkpoint”：`U/eval_agent.py:run_eval_with_tyro` 从独立 `CheckpointConfig.checkpoint` 加载，需启动参数/加载日志才能把此次eval与某个模型对应。本轮没有运行该入口。
 
-`R/README.txt` 的“formal training has not been started”已落后于实际产物。用户于本轮明确补充：“当前训练我已经viewer验证过时成功的”。据此将结论更新为：**原版 Object Stage 1 已通过用户 viewer 人工验证，原版复现成功（人工观察层面）**。日志提供学习进展的补充证据。未保存的准确 checkpoint 对应关系、多起点成功率和误差分布属于后续对照记录的完善项，不作为否定该复现结果或开始最小实现的阻塞。此确认仅针对原版训练，不扩展到尚未实施的 Loaded-4D。
+`R/README.txt` 的“formal training has not been started”已落后于实际产物。用户于本轮明确补充：“当前训练我已经viewer验证过时成功的”。据此将结论更新为：**原版 Object Stage 1 已通过用户 viewer 人工验证，原版复现成功（人工观察层面）**。日志提供学习进展的补充证据。未保存的准确 checkpoint 对应关系、多起点成功率和误差分布属于后续对照记录的完善项，不作为否定该复现结果或开始最小实现的阻塞。此确认仅针对原版训练，不扩展到尚未训练验收的 Loaded-4D。
 
 旧最新恢复运行：`A/unified_hoi_hmi_stage1/formal_recovery_after_probe_20261123_2050/training/logs/WholeBodyTracking/20261123_125742-unified_hoi_stage1-locomotion/training_status.json` 当前记录 `interrupted`、2232 completed updates、actor/critic 各 44640 optimizer steps；同目录存在 `model.pt`。旧报告的 2078/running 是历史快照，不能代替现在的 status。该 checkpoint 的输入/action/任务协议不适合作为新 Loaded-4D 初始化。
 
@@ -369,16 +369,16 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 | Actual file path / 拟新增path | Relevant class/function | Current behavior | Required change / 为什么 | Config或source | 可复用旧实现 | Validation method |
 |---|---|---|---|---|---|---|
 | `/home/han/pyx/HMI_clean/src/holosoma/holosoma/managers/command/terms/wbt.py`（已有） | `MotionCommand.reset`, `MotionCommand.step` | reset硬编码soft clip；step将advance、clip-end reset与relative targets刷新耦合 | 提取一个reset joint preparation hook（默认保持原clip）；提取relative-reference刷新为可调用hook（默认step仍同序调用）。Loaded subclass调用复用逻辑，无需复制整个reset/loader | Source，小范围提取；配置无法绕过hard-coded clip/step副作用 | 旧同文件 `_prepare_reset_joint_positions`；旧`CarryCommand._update_relative_reference`仅作对照 | 原Object/Climb CPU tests；默认reset输出不变；Loaded硬限位负例报错、合法q不变；原step regression；不全局改sim limits |
-| `/home/han/pyx/HMI_clean/src/holosoma/holosoma/managers/command/terms/loaded_4d.py`（拟新增） | 拟新增 `Loaded4DCommand(HybridMotionCommand)`、heading测量pure helper、`set_command` | 现有Hybrid只有endpoint condition且clip-end reset | 独立4D buffers；严格pelvis heading-rate；Track时钟、Gen frozen reference；reset exact；本步applied command与下步published command；Gen sampler/插值；禁止endpoint metrics/curriculum。保留上游loader/sampler/partition | Source；范围限制/ratio/dwell/fps/阶段为params配置 | `CarryCommand` shape/finite/Gen-only接口，`Stage1TrackCommand` reset/time，`transition`数学。不得继承旧CarryCommand | CPU q/omega倾斜与yaw wrap、跨clip导数、reset首帧/末帧、重复callback、Gen setter无物理写、random-command isolation；fps mismatch fail-fast；loader跳过任何指定文件时失败 |
-| `/home/han/pyx/HMI_clean/src/holosoma/holosoma/envs/wbt/loaded_4d.py`（拟新增） | 拟新增小型 `Loaded4DTrackingManager(WholeBodyTrackingManager)`；task observations、Gen reward、clip/physical termination functions | 原BaseTask reset_all空转；reward前未advance；无4D rewards和实际carry failure | 仅override reset_all、pre-physics applied-command快照、pre-termination推进/互斥timeout处理及必要checkpoint contract；薄terms读取同一command/helper，保留manager框架。physical geometry与reward计算无phase机器 | Source；数值阈值用params，不增新环境框架 | `Stage1CarryEnv.reset_all/_check_termination`、`box_bottom`公式、旧task_errors修正版本；不迁移FullBodyEnv或Simulator | step spy确认一次advance和zero hidden step；Gen越过reference长度不reset；drop gate、ground-relative height、final obs与truncation/failure互斥bootstrap；重复metrics无计时副作用 |
-| `/home/han/pyx/HMI_clean/src/holosoma/holosoma/config_values/wbt/g1/loaded_4d.py`（拟新增） | 拟新增一个Loaded preset factory/共享配置，stage/data variant只是replace | 现有Object preset含endpoint、10s/terminal hold/noisy RSI等 | 配置移除endpoint terms/curriculum、增加obs/rewards/termination引用；显式保留WBT profile默认值，禁用fixed-scene metadata注入；Stage1/2共用schema；三data选择；固定mass/material可直接复用randomizers；Loaded joint-limit margin设1.0；horizon/DR/initial noise独立列出 | Configuration composition；写Python preset但无新算法 | 原Object preset优先；旧preset只查差异，不能继承整套 | resolved config diff allowlist；data文件数/hash；obs字母序/维度/normalizer/noise/action一致；原preset serialized内容不变 |
+| `/home/han/pyx/HMI_clean/src/holosoma/holosoma/managers/command/terms/loaded_4d.py`（本轮已新增） | 拟新增 `Loaded4DCommand(HybridMotionCommand)`、heading测量pure helper、`set_command` | 现有Hybrid只有endpoint condition且clip-end reset | 独立4D buffers；严格pelvis heading-rate；Track时钟、Gen frozen reference；reset exact；本步applied command与下步published command；Gen sampler/插值；禁止endpoint metrics/curriculum。保留上游loader/sampler/partition | Source；范围限制/ratio/dwell/fps/阶段为params配置 | `CarryCommand` shape/finite/Gen-only接口，`Stage1TrackCommand` reset/time，`transition`数学。不得继承旧CarryCommand | CPU q/omega倾斜与yaw wrap、跨clip导数、reset首帧/末帧、重复callback、Gen setter无物理写、random-command isolation；fps mismatch fail-fast；loader跳过任何指定文件时失败 |
+| `/home/han/pyx/HMI_clean/src/holosoma/holosoma/envs/wbt/loaded_4d.py`（本轮已新增） | 拟新增小型 `Loaded4DTrackingManager(WholeBodyTrackingManager)`；task observations、Gen reward、clip/physical termination functions | 原BaseTask reset_all空转；reward前未advance；无4D rewards和实际carry failure | 仅override reset_all、pre-physics applied-command快照、pre-termination推进/互斥timeout处理及必要checkpoint contract；薄terms读取同一command/helper，保留manager框架。physical geometry与reward计算无phase机器 | Source；数值阈值用params，不增新环境框架 | `Stage1CarryEnv.reset_all/_check_termination`、`box_bottom`公式、旧task_errors修正版本；不迁移FullBodyEnv或Simulator | step spy确认一次advance和zero hidden step；Gen越过reference长度不reset；drop gate、ground-relative height、final obs与truncation/failure互斥bootstrap；重复metrics无计时副作用 |
+| `/home/han/pyx/HMI_clean/src/holosoma/holosoma/config_values/wbt/g1/loaded_4d.py`（本轮已新增） | 拟新增一个Loaded preset factory/共享配置，stage/data variant只是replace | 现有Object preset含endpoint、10s/terminal hold/noisy RSI等 | 配置移除endpoint terms/curriculum、增加obs/rewards/termination引用；显式保留WBT profile默认值，禁用fixed-scene metadata注入；Stage1/2共用schema；三data选择；固定mass/material可直接复用randomizers；Loaded joint-limit margin设1.0；horizon/DR/initial noise独立列出 | Configuration composition；写Python preset但无新算法 | 原Object preset优先；旧preset只查差异，不能继承整套 | resolved config diff allowlist；data文件数/hash；obs字母序/维度/normalizer/noise/action一致；原preset serialized内容不变 |
 | `/home/han/pyx/HMI_clean/src/holosoma/holosoma/config_values/experiment.py`（已有） | `DEFAULTS`, `AnnotatedExperimentConfig` | 仅已有exp aliases | 导入/注册新Loaded alias；保留现有名字和值 | Source注册，极小改动 | 上游注册方式 | CLI解析/构造config无sim smoke；Object/Climb aliases未变 |
-| `/home/han/pyx/HMI_clean/src/holosoma/holosoma/envs/wbt/tests/test_loaded_4d.py`（拟新增） | 拟新增协议测试 | 现有测试覆盖原hybrid但非新语义 | 合并必须的CPU tests：heading、time、reset、mask、schema、command更新/transfer；不为低风险配置堆叠镜像测试 | Test only | 原command/observation/reward/termination hybrid tests；旧stage1 tests择取语义断言 | 无sim/GPU单测先行，之后实施阶段专门短Isaac验证真实reset |
-| `/home/han/pyx/HMI_clean/scripts_run/evaluate_loaded_4d.py`（拟新增） | 拟新增薄evaluation entry，调用原加载/推理接口 | 原viewer/metrics没有4D连续执行与clip-end物理写统计 | 承载Stage1按clip/起点和Stage2 command sequence评估；记录失败和reset、mean/stochastic、tracking/command/clearance；同一decoder/normalizer | Evaluation source，非trainer | `P/scripts/carry/evaluate_fullbody.py`、`evaluate_unified_hoi.py`的统计口径，不复制phase case矩阵 | checkpoint schema错配拒绝；固定seed可复查；无command-reset；PyTorch推理先验收，ONNX按需求追加 |
+| `/home/han/pyx/HMI_clean/src/holosoma/holosoma/envs/wbt/tests/test_loaded_4d.py`（本轮已新增） | 拟新增协议测试 | 现有测试覆盖原hybrid但非新语义 | 合并必须的CPU tests：heading、time、reset、mask、schema、command更新/transfer；不为低风险配置堆叠镜像测试 | Test only | 原command/observation/reward/termination hybrid tests；旧stage1 tests择取语义断言 | 无sim/GPU单测先行，之后实施阶段专门短Isaac验证真实reset |
+| `/home/han/pyx/HMI_clean/scripts_run/evaluate_loaded_4d.py`（本轮已新增） | 拟新增薄evaluation entry，调用原加载/推理接口 | 原viewer/metrics没有4D连续执行与clip-end物理写统计 | 承载Stage1按clip/起点和Stage2 command sequence评估；记录失败和reset、mean/stochastic、tracking/command/clearance；同一decoder/normalizer | Evaluation source，非trainer | `P/scripts/carry/evaluate_fullbody.py`、`evaluate_unified_hoi.py`的统计口径，不复制phase case矩阵 | checkpoint schema错配拒绝；固定seed可复查；无command-reset；PyTorch推理先验收，ONNX按需求追加 |
 
-将小型任务terms合并到两个runtime新文件是为限制改动面；若仓库review要求按manager分文件，可拆分而不增加行为。命名是建议，实际实现时以review确定命名为准，不能将拟新增函数当现有API调用。
+将小型任务terms合并到两个runtime新文件是为限制改动面；若仓库review要求按manager分文件，可拆分而不增加行为。实际实现采用本表的 `Loaded4DCommand` 和 `Loaded4DTrackingManager`；公开命令及外部接口示例见现有 `README.md` 的 Loaded-4D 小节。
 
-数据选择仅需未来创建三文件view（以及squat二文件view），指向§5列出的不可变NPZ；Loaded setup须断言实际加载数量、各clip长度/hash与指定集合一致。原 `MultiMotionLoader`会警告后跳过格式不兼容文件，不能把“仍加载成功一个clip”误当joint训练就绪。**不修改 `MotionLoader/MultiMotionLoader`**，不新增数据转换程序。如果实现团队希望支持任意显式file list，这是可选扩展，不属于首版必需。
+数据选择已创建三文件view（以及squat二文件view），指向§5列出的不可变NPZ；Loaded setup须断言实际加载数量、各clip长度/hash与指定集合一致。原 `MultiMotionLoader`会警告后跳过格式不兼容文件，不能把“仍加载成功一个clip”误当joint训练就绪。**不修改 `MotionLoader/MultiMotionLoader`**，不新增数据转换程序。如果实现团队希望支持任意显式file list，这是可选扩展，不属于首版必需。
 
 ### 7.2 可选修改：必须有触发条件
 
@@ -439,8 +439,8 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 推荐实施范围控制为：
 
 - **修改2个现有文件**：`U/managers/command/terms/wbt.py` 仅提取默认行为不变的reset/relative-reference hooks；`U/config_values/experiment.py` 仅注册新preset。
-- **新增3个任务源码文件**：`managers/command/terms/loaded_4d.py`、`envs/wbt/loaded_4d.py`、`config_values/wbt/g1/loaded_4d.py`（均为拟新增）。用params/replace区分Stage1/Stage2和单技能data view。
-- **新增1个协议测试文件与1个薄评估入口**：路径见§7；未来创建只含指定NPZ的只读数据视图，不重写NPZ、不生成新motion。
+- **新增3个任务源码文件**：`managers/command/terms/loaded_4d.py`、`envs/wbt/loaded_4d.py`、`config_values/wbt/g1/loaded_4d.py`（本轮已新增）。用params/replace区分Stage1/Stage2和单技能data view。
+- **新增1个协议测试文件与1个薄评估入口**：路径见§7；已创建只含指定NPZ的相对symlink数据视图，不重写NPZ、不生成新motion。
 - **保持不变**：PPO数学、MLP隐藏层、normalizer实现、joint-position action/PD、simulator/framework、motion loaders、上游原preset、URDF/mesh、第三方依赖。保留原始运行入口以做回归对照。
 - **暂不做**：旧HOI状态机、旧PPO子类、自动训练/调度、复杂contact reward、独立curriculum系统、1ms、高PD、delta、history/lookahead、额外motion augmentation。
 
@@ -460,15 +460,29 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 | D001：计划纳入版本管理 | 2026-11-24 | 在用户选定的 `docs/loaded-4d-plan` 分支提交同名报告副本，原路径同步保留；新增持续更新、阶段性commit及每次文字记录规则；将原Git状态明确标记为审查快照，避免与文档分支混淆 | 核对两个副本内容、十个必需章节和Git diff；本提交仅含Markdown报告，无Python/config/NPZ/checkpoint变更；未执行训练或仿真 |
 | D002：明确工作路径与首次推送范围 | 2026-11-24 | 明确后续代码工作区为 `/home/han/pyx/HMI_clean`，计划继续在原路径和仓库内同步；记录用户授权将原版 `main` 与文档分支推送到 HMI-carry，便于远程审查 | 推送前 `ls-remote --heads origin` 无分支；核对origin地址、分支及双副本一致性；本提交仅修改报告。推送完成后核对远端两分支的commit与本地一致，最终结果以Git远端refs为准 |
 | I001：Loaded-4D核心实现 | 2026-11-24 | 在 `feature/loaded-4d` 实现独立command、薄WBT环境和共享Stage1/2 presets；原motion仅提取2个hook；注册4个实验alias，创建5个不可变NPZ相对symlink；新增协议及checkpoint测试 | 17项新CPU测试和28项上游command/preset回归通过；Actor113D/Critic315D由真实ObservationManager计算；原PPO恢复网络/normalizer/optimizer/std测试通过；未启动GPU仿真或训练 |
+| I002：评估入口、从头训练与使用说明 | 2026-11-24 | 完成薄评估工具及CPU数据检查；增加终止前快照/隐藏reset/失败trial测试；按用户要求在现有README加入从头Stage1、smoke、单技能、Stage2迁移和连续评估命令；同步计划 | 最终95项CPU测试通过（20项Loaded测试＋75项上游回归）；真实PPO constructor/setup确认Stage1无checkpoint也可初始化、iter0/空optimizer/新normalizers/std1.0；README五条训练命令实际Tyro解析通过；三NPZ hash/fps/联合分布复核通过；未运行仿真或训练 |
 
 ### 10.2 实施进度与可执行入口
 
 当前实现分支：`feature/loaded-4d`，从已推送文档版本派生。`main` 仍为 `c353731` 原版代码。
 
-已实现：§7的两个共享文件小改动、三个任务模块与协议测试。三个任务模块采用计划中给出的类名；原PPO、MLP、PD、action、motion loaders、simulator和原preset未改。`scripts_run/evaluate_loaded_4d.py` 已创建，完整评估协议仍在本轮核验。
+已实现：§7的两个共享文件小改动、三个任务模块与协议测试。三个任务模块采用计划中给出的类名；原PPO、MLP、PD、action、motion loaders、simulator和原preset未改。`scripts_run/evaluate_loaded_4d.py` 已完成，CPU测试覆盖首次失败停止、隐藏reset检测及终止前快照；真实checkpoint的PhysX评估尚未运行。
 
 - Runtime默认：200Hz physics / decimation4 / 50Hz policy，原固定中心action；Stage1全Track，Stage2固定50/50；同一113D/315D observation schema。
 - Gen随机目标用0.8s smoothstep、height限速0.06m/s；外部每帧重定向使用连续限速，避免重启smoothstep造成停滞。外部目标与本步applied command分开保存。
 - CPU测试已验证：严格yaw-rate、精确reset、单调step token、Gen越过clip末帧无physical write、外部Gen隔离、实际持箱gate、失败优先于timeout、final observation在reset前捕获、checkpoint迁移保留新分组。
 - `datasets/loaded_4d/joint/` 中3条和 `squat/` 中2条是相对symlink，指向工作区已有旧仓库的指定NPZ；没有复制或修改NPZ。新机器须提供这些原数据并保持布局，或用CLI覆盖 `motion_dir/motion_file` 指向相同hash的数据视图；不自动下载数据。
 - 本轮尚未运行PhysX reset/rollout、短训练、joint训练或Stage2训练。物理阈值、真实接触、1.1kg/inertia和原PD下可学性仍需计划中的后续实验验收。
+
+
+最终验证与运行入口：
+
+1. `README.md` 的 **Loaded-4D：当前实现与训练指令** 小节是最新操作入口；保留原版Object/Climb章节。新增README为用户追加要求的文档改动，不扩大核心源码范围。
+2. Stage1从头训练：`python src/holosoma/holosoma/train_agent.py exp:g1-loaded-4d-stage1 --training.checkpoint=None`；完整环境、logger与资源参数见README。默认随机初始化网络、空optimizer、normalizer count0、iter0、std1.0、Track1.0，无自动旧模型恢复。
+3. Stage1三个alias为 `exp:g1-loaded-4d-stage1`、`exp:g1-loaded-4d-stage1-locomotion`、`exp:g1-loaded-4d-stage1-squat`。Stage2用 `exp:g1-loaded-4d-stage2` 加本实现joint Stage1的checkpoint；`loaded-4d.axes` 支持 `single/pair/combined`，同一实现配置推进。
+4. 数据CPU检查：`python scripts_run/evaluate_loaded_4d.py --validate-data`。评估使用 `--checkpoint ... --mode track` 或 `--mode gen --seconds 60`；支持seed/trials/RSI起点、mean/stochastic、JSON指令序列及viewer。
+5. 新增20项CPU测试位于 `U/envs/wbt/tests/test_loaded_4d.py`；最终相关回归共95项通过。仓库多个目录含同名 `test_wbt_hybrid.py`，联合运行时使用 `pytest --import-mode=importlib`，无需删除缓存或改上游测试。模块编译和 `git diff --check` 通过，实际训练CLI和配置序列化往返通过。
+6. 实现中的明确取舍：外部流采用可重定向限速，随机采样采用smoothstep；物理gate只证明有限的实际几何约束，不声称双手摩擦承重；继承的Gen tracking常数保留并单列日志。Stage1/2恢复时检查obs/action/timing/data契约，重建环境分组和command状态。
+7. 后续实际验收仍按§8第3步起执行：小规模PhysX reset/rollout与保存恢复，再单技能/joint Stage1、独立Stage1评估、Stage2学习和连续command评估。本轮测试使用CPU数据与simulator double验证协议，**不能作为真实物理稳定或训练收敛证明**。
+
+实施提交说明均包含“修改内容、修改原因、核验结果、未完成事项”。首个核心实现commit为 `a099200`；评估及README完成记录为I002，其准确hash由 `git log feature/loaded-4d` 查询。完成后按用户授权普通push实现分支，不覆盖原main对照。

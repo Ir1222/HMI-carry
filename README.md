@@ -57,6 +57,158 @@ source scripts/source_isaacsim_setup.sh
 wandb login
 ```
 
+## Loaded-4D：当前实现与训练指令
+
+代码工作目录为 `/home/han/pyx/HMI_clean`，实现分支为 `feature/loaded-4d`。
+本任务从已经持箱的 reference state 开始，箱体是自由动态刚体；外部 command 为
+`[vx, vy, yaw_rate, pelvis_height]`，分别表示 pelvis heading frame 的前后/侧向速度
+（m/s）、heading 变化率（rad/s）、pelvis 离地高度（m）。
+
+Stage 1 **可以从头训练，不需要任何已有 checkpoint**：三个 Stage 1 preset 默认
+`checkpoint=None`、Track ratio=1.0，使用原 PPO 随机初始化网络、空 optimizer state、
+新 observation normalizers 和 `init_noise_std=1.0`。不会自动寻找旧日志或旧模型恢复。
+下面显式写出 `--training.checkpoint=None`。三条 reference 联合训练是默认主实验；
+locomotion/squat 是同一实现的诊断配置。原版 Object/Climb 的命令保留在后面的章节中。
+
+当前代码已通过 CPU 协议与上游回归验证，尚未完成真实 PhysX rollout 或 Loaded-4D
+训练验收。以下训练和评估命令会在你执行时启动仿真；CPU 数据检查不会启动仿真。
+详细设计、修改记录及验证边界见 [implementation plan](HMI_LOADED_4D_IMPLEMENTATION_PLAN.md)。
+
+### 本机环境与数据检查
+
+使用现有隔离 runtime，无需重新安装依赖：
+
+```bash
+cd /home/han/pyx/HMI_clean
+source /home/han/pyx/HMI_clean_runtime/activate.sh
+python scripts_run/evaluate_loaded_4d.py --validate-data
+```
+
+`datasets/loaded_4d/joint/` 只包含三条 reference 的相对 symlink，`squat/` 只包含两条
+蹲起。原始 NPZ 位于同级旧工作区的
+`g1_carry_baseline_new/HMI/datasets/unified_hoi_v1/motions/`，不会被训练代码修改。
+新机器需要自行提供这些原数据；仓库不包含 NPZ 副本。移动数据位置时，将
+`--command.setup-terms.motion-command.params.motion-config.motion-dir`
+指向只含相应文件的目录；locomotion-only 使用 `motion-file`。运行时会核对文件集合、
+SHA256、帧数和 50 Hz，不接受加载器静默跳过某个 clip。
+
+### Stage 1：三条 reference 联合、从头训练
+
+```bash
+python src/holosoma/holosoma/train_agent.py \
+  exp:g1-loaded-4d-stage1 \
+  logger:disabled \
+  --training.checkpoint=None \
+  --training.num-envs=8192 \
+  --algo.config.num-learning-iterations=15000 \
+  --logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/stage1
+```
+
+`logger:disabled` 关闭 W&B，仍保存 TensorBoard、配置和 checkpoint。实际输出目录以
+启动日志为准。默认 200 Hz physics、decimation=4、50 Hz policy、15 s episode，
+Actor/Critic 输入为 113D/315D；保持原 MLP、joint-position action、PD 和 PPO。
+不应使用原版 111D/316D 或旧 carry 357D/207D checkpoint 初始化该任务。
+
+建议先执行同一 preset 的小规模启动检查；它也从头初始化，不等于正式训练已通过：
+
+```bash
+python src/holosoma/holosoma/train_agent.py \
+  exp:g1-loaded-4d-stage1 \
+  logger:disabled \
+  --training.checkpoint=None \
+  --training.num-envs=64 \
+  --algo.config.num-learning-iterations=3 \
+  --algo.config.save-interval=1 \
+  --logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/smoke
+```
+
+单技能短训练用于定位行走与蹲起问题，两条命令分别执行：
+
+```bash
+python src/holosoma/holosoma/train_agent.py \
+  exp:g1-loaded-4d-stage1-locomotion \
+  logger:disabled \
+  --training.checkpoint=None \
+  --training.num-envs=128 \
+  --algo.config.num-learning-iterations=200 \
+  --algo.config.save-interval=100 \
+  --logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/locomotion
+
+python src/holosoma/holosoma/train_agent.py \
+  exp:g1-loaded-4d-stage1-squat \
+  logger:disabled \
+  --training.checkpoint=None \
+  --training.num-envs=128 \
+  --algo.config.num-learning-iterations=200 \
+  --algo.config.save-interval=100 \
+  --logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/squat
+```
+
+这些短训练不作为收敛验收。单技能 checkpoint 与 joint 的数据集合不同，当前 contract
+会拒绝直接混用；主实验应使用 joint preset 从头训练。
+
+### Stage 2：从新的 joint Stage 1 checkpoint 迁移
+
+将示例路径替换为**本实现**训练并验收后的 joint Stage 1 checkpoint：
+
+```bash
+python src/holosoma/holosoma/train_agent.py \
+  exp:g1-loaded-4d-stage2 \
+  logger:disabled \
+  --training.checkpoint=/absolute/path/to/loaded_4d_stage1/model.pt \
+  --training.num-envs=8192 \
+  --algo.config.num-learning-iterations=15000 \
+  --algo.config.reset-policy-std-on-resume=False \
+  --command.setup-terms.motion-command.params.loaded-4d.axes=single \
+  --logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/stage2
+```
+
+Stage 2 默认重新建立 50/50 Track/Gen 分组，恢复 Actor、Critic、两个 normalizer、
+optimizer 和 learned std。`num-learning-iterations` 表示本次**追加** updates。
+先以 `axes=single` 学习单轴；验证后从 Stage 2 checkpoint 继续，将同一个参数改为
+`pair`，再改为 `combined`。可用 `loaded-4d.dwell-s='[3.0, 5.0]'` 调整切换周期。
+初始采样范围为 vx±0.15、vy±0.10、yaw±0.20、height 0.66–0.73；扩大范围须单独验收。
+
+### Stage 1 / Stage 2 评估
+
+完整 reference 评估，逐 clip 从 frame 0 开始，每条 10 个 trial：
+
+```bash
+python scripts_run/evaluate_loaded_4d.py \
+  --checkpoint /absolute/path/to/loaded_4d_stage1/model.pt \
+  --mode track --trials 10 --start-frames 0 \
+  --output /home/han/pyx/HMI_clean_runs/loaded_4d/eval_stage1/results.json
+```
+
+可加 `--start-frames 0 25 50` 检查多个 RSI 起点，或 `--motion-id 0` 选择 clip
+（ID 按 loader 的文件名字母序排列）。`--stochastic` 使用 learned exploration std；
+默认使用 policy mean，并保持训练时的 observation noise 配置和冻结的 normalizers。
+
+60 s 连续 Gen 指令评估，包含站立、前后/侧向、转弯、蹲起及组合：
+
+```bash
+python scripts_run/evaluate_loaded_4d.py \
+  --checkpoint /absolute/path/to/loaded_4d_stage2/model.pt \
+  --mode gen --seconds 60 --trials 10 \
+  --output /home/han/pyx/HMI_clean_runs/loaded_4d/eval_stage2/results.json
+```
+
+`--sequence /path/commands.json` 可提供四维 command 的 JSON 数组，按等时段执行；
+`--viewer` 开启本地 simulator viewer。工具记录 command 误差、robot/object tracking
+误差、box clearance、reset、首次失败原因和响应序列；不会将失败重置后的片段拼成成功。
+`completion_fraction` 只表示完成率，command 误差和持箱情况须同时验收。
+
+已有环境的外部输入接口：
+
+```python
+command = env.command_manager.get_state("motion_command")
+command.set_command([0.10, 0.00, 0.15, 0.70])  # 所有 Gen envs；可显式传 env_ids
+command.release_external_command()  # 回到随机采样；不重置物理状态
+```
+
+调用 setter 只改变目标；policy 实际接收的指令按控制周期插值。可分别读取
+`target_command`、`task_command`、`applied_command`；Track envs 拒绝外部覆盖。
+
 ## Training
 
 Training uses two stages:
