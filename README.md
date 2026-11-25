@@ -274,6 +274,43 @@ TensorBoard 单独终端运行，访问 http://localhost:6020。重点检查
 不要仅凭总分或平均存活时间选 checkpoint。实际训练、结果和未通过项见
 [本轮结果记录](HMI_LOADED_4D_STAGE2_VXH_RESULTS.md)。
 
+本轮正在使用的短训目录（`model.pt` 会每 100 个显示 iteration 更新）：
+
+```bash
+RUN=/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/short_1000/WholeBodyTracking/20261125_145544-g1_loaded_4d_stage2_vxh-locomotion
+CHECKPOINT="$RUN/model.pt"
+tail -f /home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/short_1000.log
+```
+
+本轮已启动 `screen` 会话 `hmi-vxh-round`，等待短训结束后顺序执行
+`scripts_run/continue_loaded_4d_vxh.sh`：每 1500 updates 做六目标和三 Track 各2-trial筛查，
+出现稳态响应后才测连续切换；累计不超过15000 updates。三个连续窗口没有前进/高度响应，
+或 Track 出现严重退化时保存结果并停止追加训练。结束时对筛选候选做每目标10trial、三Track各10trial，
+有响应才做连续10trial；脚本不放宽验收阈值、不扩大范围。筛选同时考虑任务成功、误差、存活、
+Track完成率及相对Stage1的body/object误差，不能把 `best_checkpoint.txt` 自动解释为可部署模型。
+
+```bash
+screen -ls
+cat /home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/progress.json
+cat /home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/round_driver.log
+```
+
+当前运行期间无需重复启动。中断或诊断后，以真实保存checkpoint和该checkpoint对应的累计updates恢复：
+
+```bash
+cd /home/han/pyx/HMI_clean
+source /home/han/pyx/HMI_clean_runtime/activate.sh
+RUN=/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/short_1000/WholeBodyTracking/20261125_145544-g1_loaded_4d_stage2_vxh-locomotion
+CHECKPOINT="$RUN/model.pt"
+COMPLETED=$(python scripts_run/summarize_loaded_4d_vxh.py --count-updates "$CHECKPOINT")
+bash scripts_run/continue_loaded_4d_vxh.sh "$CHECKPOINT" "$COMPLETED"
+```
+
+已进入后续分段时，把RUN改成最近已完成段的目录，或从该段 `checkpoint.txt` 读取路径。
+计数工具沿保存checkpoint的分段祖先累计updates，正确处理重复显示编号；不清空optimizer。
+已有同名分段会拒绝覆盖，保留此前失败和完成产物。中途失败应使用新的分段名继续，
+具体段命令为 `train_loaded_4d_vxh.sh resume CHECKPOINT UPDATES NEW_SEGMENT 8192`。
+
 ### Stage 2：从新的 joint Stage 1 checkpoint 迁移
 
 将示例路径替换为**本实现**训练并验收后的 joint Stage 1 checkpoint：

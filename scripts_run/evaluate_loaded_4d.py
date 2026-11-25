@@ -119,6 +119,8 @@ def summarize_segment(rows, target, criteria, exclusion_s):
         delta = np.asarray(rows[-1]['root_position'])-rows[0]['root_position']
         result['world_net_displacement'] = delta.tolist()
         result['forward_net_displacement'] = float(np.dot(delta[:2], rows[0]['root_heading']))
+    if rows[0].get('reward_rates'):
+        result['reward_rate_mean'] = {k: float(np.mean([r['reward_rates'][k] for r in rows])) for k in rows[0]['reward_rates']}
     if not steady:
         return {**result, 'failure_reasons': ['no_steady_samples']}
     values = np.array([r['measured'] for r in steady])
@@ -127,6 +129,8 @@ def summarize_segment(rows, target, criteria, exclusion_s):
     error = np.abs(values-np.array([r['applied'] for r in steady]))
     result.update(measured_mean=values.mean(0).tolist(), mae=error.mean(0).tolist(),
                   p95=np.quantile(error,.95,axis=0).tolist(), steady_seconds=len(steady)*rows[0]['dt'])
+    if steady[0].get('reward_rates'):
+        result['steady_reward_rate_mean'] = {k: float(np.mean([r['reward_rates'][k] for r in steady])) for k in steady[0]['reward_rates']}
     reasons=[]
     if criteria is None:
         return {**result, 'task_success': None, 'failure_reasons': ['criteria_not_supplied']}
@@ -212,8 +216,11 @@ def run_trial(env, algo, *, mode, steps, sequence, stochastic, seed, transition_
                    'measured': snapshot['measured'][0].cpu().tolist(),
                    'reference_frame': int(snapshot['reference_frame'][0]), 'box_clearance': clearances[-1]}
             for key in ('foot_force_z','foot_height','foot_min_height','foot_slip','hand_box_local',
-                        'hand_box_speed','box_tilt','root_position','root_heading','box_quaternion'):
+                        'hand_box_speed','box_tilt','root_position','root_heading','box_quaternion',
+                        'upright','heading_projection','box_separation'):
                 if key in snapshot: row[key] = snapshot[key][0].cpu().tolist()
+            row['reward_rates'] = {k.split('/')[-1]: float(v) for k, v in getattr(env, 'log_dict', {}).items()
+                                   if k.startswith('loaded_4d/gen_reward_rate/')}
             segment_rows[segment].append(row)
             # Store diagnostics at 10 Hz; success uses every control step.
             if step % max(1, round(.1 / env.dt)) == 0 or bool(dones[0]):
@@ -271,6 +278,7 @@ def evaluate(args):
     term = replace(term, params={**term.params, 'motion_config': motion, 'loaded_4d': options})
     cfg = replace(cfg,
         command=replace(cfg.command, setup_terms={'motion_command': term}),
+        reward=g1_loaded_4d_stage2_vxh.reward if args.vxh_protocol else cfg.reward,
         training=replace(cfg.training, num_envs=1, headless=not args.viewer, checkpoint=str(checkpoint), seed=args.seed),
         simulator=replace(cfg.simulator, config=replace(cfg.simulator.config,
             sim=replace(cfg.simulator.config.sim, max_episode_length_s=max(16., args.seconds + 1.)))),

@@ -33,7 +33,7 @@ The failed continuous squat trial was seed 0 at 3.90 s, termination `bad_trackin
 
 ## Validation and current training state
 
-- CPU: 51 relevant tests passed, including old preset isolation, observation/action compatibility, nonzero Track axes versus zero Gen axes, quota/bin coverage, shared random/manual ramps, arrival dwell, forward single support exemption, Gen masks, first failure and hidden reset, repeated trial reset, Viser regressions and task-success false-positive cases. Original data hash/fps validation passed.
+- CPU: 56 relevant tests passed (53 task/runner/Viser tests plus 3 Viser-before-Isaac startup regressions), including old preset isolation, observation/action compatibility, nonzero Track axes versus zero Gen axes, quota/bin coverage, shared random/manual ramps, arrival dwell, forward single support exemption, Gen masks, first failure and hidden reset, repeated trial reset, Viser regressions and task-success false-positive cases. Original data hash/fps validation passed.
 - Real Viser GUI: new controls constructed, fixed zero-axis number fields accepted, temporary local HTTP returned 200. Old controls remain covered. Full rendered VXH policy quality is not claimed.
 - Real simulation: 64-env transfer 3 updates, save, restore, 2 further updates. All 935 recorded smoke scalar samples finite. Adam steps 60→100 prove optimizer continuation; std mean .03954→.03955; both normalizer counts continue. The five updates count toward the 15000 budget.
 - Formal short training: 8192 env, 995 additional updates started, restoring the smoke optimizer/std/normalizers. Cumulative planned short stage=1000. Capability results are pending; smoke is implementation verification, not convergence evidence.
@@ -44,17 +44,33 @@ Restored smoke checkpoint: `smoke_resume/WholeBodyTracking/20261125_145417-g1_lo
 Short run: `short_1000/WholeBodyTracking/20261125_145544-g1_loaded_4d_stage2_vxh-locomotion`.
 TensorBoard: http://localhost:6020, logdir is the run root. `segment.json` in each segment records updates, display labels, input and output checkpoint. The upstream PPO repeats the saved label on resume; sum completed updates rather than subtracting labels.
 
-## Capability results (not yet measured for trained VXH)
+## Early capability measurements and ongoing work
 
-| Target vx / height | Trials | task_success | Status |
-|---|---:|---:|---|
-| .1 / .73 | 0 | — | Pending short-training evaluation |
-| .4 / .73 | 0 | — | Pending short-training evaluation |
-| .8 / .73 | 0 | — | Pending short-training evaluation |
-| 0 / .60 | 0 | — | Pending short-training evaluation |
-| 0 / .69 | 0 | — | Pending short-training evaluation |
-| 0 / .80 | 0 | — | Pending short-training evaluation |
+The stable diagnostic copy `diagnostics/updates_103/checkpoint/model_06100.pt` represents **103 additional updates**, not a converged model. Six targets were measured with one trial each from locomotion frame 0, mean actions, seed 0. All failed physically with pelvis height below .40 m; falling displacement is not credited as successful movement. No target had the required >=2 s steady window, so no valid steady MAE/P95 is reported as a control score.
 
-Continuous sequence and new checkpoint Track retention are pending. No trained VXH checkpoint is recommended for deployment yet. Keep Stage1 model_06000 as the Track reference baseline; smoke checkpoints only verify the implementation. No larger velocity, lower height or vx+h combination is claimed.
+| Target vx / height | Success | First failure (s) | Applied reached target (s) | Pelvis start → end (m) |
+|---|---:|---:|---:|---:|
+| .1 / .73 | 0/1 | .98 | .92 | .741 → .374 |
+| .4 / .73 | 0/1 | 1.02 | .18 | .741 → .363 |
+| .8 / .73 | 0/1 | 1.02 | Not reached | .741 → .391 |
+| 0 / .60 | 0/1 | .98 | Not reached | .741 → .386 |
+| 0 / .69 | 0/1 | .98 | Not reached | .741 → .362 |
+| 0 / .80 | 0/1 | .98 | Not reached | .741 → .346 |
 
-Reproducible training, continuation, target/sequence/Track evaluation and Viser/TensorBoard commands are in README. Raw checkpoints/events/traces remain outside Git; small evidence summaries and frozen configuration are under `docs/loaded_4d_vxh`.
+The untrained Stage1 checkpoint under the identical Gen command protocol also failed all six targets in .98–1.04 s. The 103-update checkpoint completed all three Track clips (one seed each):
+
+| Track | Complete | Body / object position MAE (m) |
+|---|---:|---:|
+| continuous squat | 1/1 | .05872 / .09320 |
+| locomotion | 1/1 | .04295 / .04717 |
+| repeated squat | 1/1 | .05996 / .09851 |
+
+These samples do not establish final Track retention; object error is larger than the Stage1 baseline. They also do not establish a unique failure cause. The decision is to continue the planned short training rather than treat 103 updates as a convergence test. Raw Target/Applied/Measured, displacement, support, geometry, clearance and failure traces are outside Git; [early_diagnostics.json](docs/loaded_4d_vxh/early_diagnostics.json) is the small evidence summary.
+
+At the 2026-11-25 23:12:30 CST snapshot, training PID **1140610** had completed **246/15000 additional updates**, display iteration6243; the latest saved `model.pt` held display6200 / additional203. The 8192-env short segment targets cumulative1000. Saved actor lr=1e-5 after the original adaptive schedule (initial transfer used1e-4), std mean=.04416; recorded scalars remained finite. See [training_snapshot.json](docs/loaded_4d_vxh/training_snapshot.json) for measured sampling bins and reward contributions. Early sampling was approximately49.8% forward/40.4% height/9.9% stand, with nearly uniform within-category bins. The Gen tracking constant sums to3.5/s; reward-rate logs separately expose task gains and action/contact/support/carry costs.
+
+The sequential continuation script is already waiting in screen session **hmi-vxh-round**. After1000 updates it evaluates six goals and three Track clips with2 trials each; it continues in1500-update segments within the15000 budget, restores optimizer/std/normalizers, and stops for severe Track loss or three consecutive evaluation windows without stable command response. Candidate ranking uses task success, command errors, survival and Stage1-relative Track completion/body/object error. At budget end or a diagnostic stop, the best screened candidate receives10 trials per fixed target and Track clip; continuous10-trial evaluation requires measured stable single-target response. Outcomes and decisions are persisted under `evaluations/`, `evaluation_history.jsonl`, `final_verification.jsonl` and `progress.json` in the run root.
+
+**Not yet completed:** cumulative1000 short-training evaluation, final10 trials per target, continuous control, and final10-trial Track retention. No VXH checkpoint is recommended as a usable controller yet. `model.pt` is a recovery artifact; the103-update copy is a failed diagnostic comparison. No higher speed, lower height, or vx+h combination is claimed.
+
+Training/continuation/target/sequence/Track/Viser/TensorBoard commands and recovery examples are in README. First implementation commit: `c354892`; subsequent result/runner changes are recorded by Git history. Ordinary push targets `origin/feature/loaded-4d` and preserves remote history.

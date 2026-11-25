@@ -522,3 +522,13 @@ repeated squat 10/10；连续蹲起 seed0 在3.9s触发 bad_tracking。足底与
 935个scalar均有限。这5 updates计入本轮预算。随后8192 env恢复追加995 updates，形成累计1000
 短训；能力评估和后续训练继续记录到 [本轮结果](HMI_LOADED_4D_STAGE2_VXH_RESULTS.md)。
 本节不把测试通过、存活或训练启动解释为可用 Gen 控制策略；全部验收依逐目标实际结果。
+
+I006 后续实测：累计103 updates的固定副本 model_06100 在六目标各1trial中均于0.98–1.02s
+触发 physical_failure，未形成有效稳态控制窗口；相同Gen协议下未训练Stage1也于0.98–1.04s
+全部失败。103-update checkpoint三条Track各1trial均完整完成，但object误差比Stage1基线大，
+不据此宣称最终保持能力。继续1000-update短训，不能以早期未收敛作为停止门槛。
+截至23:12:30CST累计246 updates，8192env训练仍在进行，未发现非有限训练标量。
+新增简单顺序分段/评估脚本，已在screen hmi-vxh-round等待；预算上限15000，分段恢复optimizer，
+基于真实响应和Track设置诊断停止条件，结束后候选每目标/Track各10trial，连续评估须先有稳态响应。
+最终56项针对性CPU回归通过（53项任务/恢复/Viser，加3项Viser-before-Isaac启动回归）；真实JSON验证筛查逻辑不会将跌倒的瞬时速度当成目标响应。
+首批实施commit c354892。最终Gen能力与连续控制仍未通过，不把正在运行的训练写成已完成策略。

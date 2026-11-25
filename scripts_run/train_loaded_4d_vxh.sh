@@ -41,11 +41,15 @@ python src/holosoma/holosoma/train_agent.py \
   --algo.config.reset-policy-std-on-resume=False \
   --logger.base-dir="$segment_dir"
 python - "$segment_dir" <<'PY'
-import json,sys,time
+import json,sys,time,torch
 from pathlib import Path
 folder=Path(sys.argv[1]); ledger=folder/'segment.json'; d=json.loads(ledger.read_text())
 models=list(folder.glob('WholeBodyTracking/*/model_%05d.pt' % d['last_display_iteration']))
 if len(models)!=1: raise SystemExit(f'Expected one final checkpoint, found {models}')
+payload=torch.load(models[0],map_location='cpu',weights_only=False)
+for key in ('actor_model_state_dict','critic_model_state_dict','actor_obs_normalizer_state_dict','critic_obs_normalizer_state_dict'):
+    if not all(torch.isfinite(v).all() for v in payload[key].values()): raise SystemExit(f'Nonfinite saved tensor in {key}')
+if not (payload['actor_model_state_dict']['std']>0).all(): raise SystemExit('Nonpositive policy std')
 d.update(status='complete', completed_updates=d['requested_updates'], final_checkpoint=str(models[0]), finished_unix=time.time())
 ledger.write_text(json.dumps(d,indent=2)+'\n')
 (folder/'checkpoint.txt').write_text(str(models[0])+'\n')

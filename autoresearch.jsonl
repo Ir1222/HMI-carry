@@ -1,2 +1,3 @@
 {"event":"initialize","baseline_commit":"e0c68a8","budget_updates":15000,"stage1_iteration":6000,"cpu_tests_passed":50,"decision":"keep implementation; await physical calibration before training"}
 {"event":"smoke","completed_updates":5,"envs":64,"optimizer_steps":[60,100],"finite_scalars":935,"decision":"keep; continue restored optimizer to cumulative 1000 at 8192 envs"}
+{"event":"early_diagnostic","additional_updates":103,"targets":{"passed":0,"trials":6,"valid_steady_windows":0},"track":{"completed":3,"trials":3},"stage1_gen_control":{"passed":0,"trials":6},"decision":"continue planned short training; insufficient training and no evidence of complete Track collapse; final acceptance pending"}

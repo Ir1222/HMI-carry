@@ -1,0 +1,182 @@
+{
+  "additional_updates": 103,
+  "checkpoint": "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/diagnostics/updates_103/checkpoint/model_06100.pt",
+  "criteria_sha256": "41065152d20a4bceb5503f66c7a7e5501a3540a109f58f1570fef99e8086060c",
+  "trials_per_target": 1,
+  "initial_state": "loaded_locomotion frame 0, mean action, seed 0, preserved observation noise",
+  "results": [
+    {
+      "target": [
+        0.1,
+        0.0,
+        0.0,
+        0.73
+      ],
+      "early_success": false,
+      "early_seconds": 0.98,
+      "target_reached_s": 0.92,
+      "steady_seconds": 0,
+      "pelvis_start": 0.7406566739082336,
+      "pelvis_end": 0.3742712736129761,
+      "forward_net_displacement": 0.478136808907653,
+      "failure_terms": [
+        "physical_failure"
+      ],
+      "stage1_success": false,
+      "stage1_seconds": 1.0,
+      "stage1_failure_terms": [
+        "physical_failure"
+      ]
+    },
+    {
+      "target": [
+        0.4,
+        0.0,
+        0.0,
+        0.73
+      ],
+      "early_success": false,
+      "early_seconds": 1.02,
+      "target_reached_s": 0.18,
+      "steady_seconds": 0.06,
+      "pelvis_start": 0.7406566739082336,
+      "pelvis_end": 0.3633497357368469,
+      "forward_net_displacement": 0.621403787902711,
+      "failure_terms": [
+        "physical_failure"
+      ],
+      "stage1_success": false,
+      "stage1_seconds": 1.02,
+      "stage1_failure_terms": [
+        "physical_failure"
+      ]
+    },
+    {
+      "target": [
+        0.8,
+        0.0,
+        0.0,
+        0.73
+      ],
+      "early_success": false,
+      "early_seconds": 1.02,
+      "target_reached_s": null,
+      "steady_seconds": 0,
+      "pelvis_start": 0.7407128810882568,
+      "pelvis_end": 0.39144816994667053,
+      "forward_net_displacement": 0.6892296374282353,
+      "failure_terms": [
+        "physical_failure"
+      ],
+      "stage1_success": false,
+      "stage1_seconds": 1.04,
+      "stage1_failure_terms": [
+        "physical_failure"
+      ]
+    },
+    {
+      "target": [
+        0.0,
+        0.0,
+        0.0,
+        0.6
+      ],
+      "early_success": false,
+      "early_seconds": 0.98,
+      "target_reached_s": null,
+      "steady_seconds": 0,
+      "pelvis_start": 0.7407033443450928,
+      "pelvis_end": 0.3864600360393524,
+      "forward_net_displacement": 0.4887679224229271,
+      "failure_terms": [
+        "physical_failure"
+      ],
+      "stage1_success": false,
+      "stage1_seconds": 1.0,
+      "stage1_failure_terms": [
+        "physical_failure"
+      ]
+    },
+    {
+      "target": [
+        0.0,
+        0.0,
+        0.0,
+        0.69
+      ],
+      "early_success": false,
+      "early_seconds": 0.98,
+      "target_reached_s": null,
+      "steady_seconds": 0,
+      "pelvis_start": 0.7407105565071106,
+      "pelvis_end": 0.36208775639533997,
+      "forward_net_displacement": 0.4882272990167167,
+      "failure_terms": [
+        "physical_failure"
+      ],
+      "stage1_success": false,
+      "stage1_seconds": 0.98,
+      "stage1_failure_terms": [
+        "physical_failure"
+      ]
+    },
+    {
+      "target": [
+        0.0,
+        0.0,
+        0.0,
+        0.8
+      ],
+      "early_success": false,
+      "early_seconds": 0.98,
+      "target_reached_s": null,
+      "steady_seconds": 0,
+      "pelvis_start": 0.7406513690948486,
+      "pelvis_end": 0.3457176685333252,
+      "forward_net_displacement": 0.4876378447855366,
+      "failure_terms": [
+        "physical_failure"
+      ],
+      "stage1_success": false,
+      "stage1_seconds": 1.0,
+      "stage1_failure_terms": [
+        "physical_failure"
+      ]
+    }
+  ],
+  "track": [
+    {
+      "motion": "continuous_grasped_squat_stand.npz",
+      "completed": true,
+      "seconds": 7.0,
+      "body_object_mae": [
+        0.058723099529743195,
+        0.09319913387298584
+      ]
+    },
+    {
+      "motion": "loaded_locomotion.npz",
+      "completed": true,
+      "seconds": 2.18,
+      "body_object_mae": [
+        0.04294918105006218,
+        0.04717295616865158
+      ]
+    },
+    {
+      "motion": "repeated_grasped_squat_stand.npz",
+      "completed": true,
+      "seconds": 13.0,
+      "body_object_mae": [
+        0.05996141955256462,
+        0.09851116687059402
+      ]
+    }
+  ],
+  "decision": "Continue planned 1000-update short training: zero valid steady target success; untrained Stage1 also fails under identical Gen command protocol, while 103-update Track completes all three clips. This is not evidence of a usable controller or definitive causal diagnosis.",
+  "raw_reports": [
+    "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/diagnostics/early_targets.json",
+    "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/diagnostics/early_track.json",
+    "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/diagnostics/stage1_vxh_targets.json"
+  ]
+}
