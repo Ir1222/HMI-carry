@@ -285,6 +285,12 @@ observation noise 配置和冻结的 normalizers。当前脚本在关闭 Isaac �
 
 ### Stage 2：在 Viser 网页中固定或切换四维 command
 
+**当前模型状态（2026-11-25）：** 用户已确认下面的 `model_20999.pt` 在 Track viewer 中仍能跟踪 reference，
+但已测试的 Gen 指令失败，包括训练范围内的 `vx=0.1`（单腿站立、没有明显前进）和下蹲
+（单腿支撑、身体变化很小）。下面是查看与诊断入口，不代表该模型已通过四维控制验收。
+完整的训练日志、reward、command 通路及 Track/Gen 对比见
+[Stage 2 Track / Gen 分析报告](HMI_LOADED_4D_STAGE2_TRACK_GEN_ANALYSIS.md)。
+
 使用训练好的 Stage 2 policy，将评估环境设为 **Gen**，并启用
 `--viser.config.loaded-4d-controls`。网页可以选择预设或手动调整
 `[vx, vy, yaw_rate, pelvis_height]`，无需重新训练。
@@ -350,6 +356,10 @@ python src/holosoma/holosoma/eval_agent.py \
 上述滑块仅控制当前可视化的 Gen envs，默认关闭；原 Stage 1 Track viewer 操作保持不变。
 
 ### Stage 2：连续 command 量化评估
+
+评估输出中的 `completed_trials` 仅表示运行至 horizon，尚未按 command 误差或支撑姿态判定成功。
+诊断当前模型时应先逐个测范围内目标，再测连续组合；同时检查 `trace` 的 Target/Applied/Measured、
+稳态误差与 reset，避免前一个目标失败后误判后续目标已被测试。
 
 60 s 连续 Gen 指令评估，包含站立、前后/侧向、转弯、蹲起及组合：
 

@@ -465,6 +465,7 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 | I004：修复量化评估跨trial重置及异常可见性 | 2026-11-25 | 用户运行`evaluate_loaded_4d.py --mode track --trials 10`，加载成功后仅见shutdown日志且无结果JSON。CPU复现脚本中的确定缺陷：rollout的`torch.inference_mode()`使真实TerminationManager持有inference tensor，下一trial在context外reset原地修改报错；改用上游eval同样的`torch.no_grad()`。增加逐trial进度、结果输出，并在Isaac cleanup前打印flush原始traceback；同步README | 新增Track/Gen连续trial测试先在旧代码上均复现第二trial reset的RuntimeError，修复后连同异常输出顺序测试及原Loaded测试共23项通过。未修改训练/manager实现/物理/数据/模型；未运行GPU评估。本次用户日志未包含原始traceback，因此不声称已排除其他运行时问题，真实30trial结果待重新执行 |
 | D003：保存用户确认可用的三reference查看流程 | 2026-11-25 | 用户确认先设置`MOTION_ID=0/1/2`再执行完整Viser命令，可分别查看同一个joint policy的三条reference表现；README写入当前run/checkpoint、环境激活、完整变量化viewer命令、ID表和切换步骤，并为主要训练/量化评估命令补齐每次新终端的环境准备；更新验证状态 | README shell代码块语法核验，真实checkpoint配置上的三个motion ID命令仅解析验证；两个计划副本同步。仅文档修改，不启动训练或仿真。实际viewer可用来自用户确认，不扩展为量化成功率或全部控制能力已验收 |
 | I005：Stage2网页手动command与速度预设 | 2026-11-25 | 用户要求在同一viewer内固定/切换四维goal，并指定前进预设0.1/0.4/0.8m/s。仅扩展`config_types/eval_callback.py:ViserConfig`和`agents/callbacks/viser_callback.py:EvalViserCallback`：显式启用Gen控件、四滑块/预设、Apply并保持、恢复随机采样、目标/实际输入/测量值及reset读数；网页线程只排队普通数值，由评估线程调用已有`set_command/release_external_command`。Gen隐藏冻结reference，Loaded-4D隐藏旧endpoint标记；原Track及上游HMI默认行为保留 | 新增6项CPU回归，本次相关47项测试通过；验证线程隔离、只控制可见Gen、不因切换reset、正常reset后持令恢复、0.6/0.78浮点边界和读数。真实Viser控件构建/HTTP200通过；README 19个bash块语法及真实Stage2 checkpoint的Gen CLI解析通过。未启动Isaac/GPU，实际0.4/0.8m/s跟踪能力未验证；该run Gen训练vx范围±0.15、axes=single，高速和组合明确列为范围外测试 |
+| D004：Stage2 Track/Gen失败审查 | 2026-11-25 | 新增 `HMI_LOADED_4D_STAGE2_TRACK_GEN_ANALYSIS.md`，核对指定run的配置、model_20999、完整TensorBoard标量、sampleweight和command/reward/observation/viewer通路；记录用户确认的范围内vx=0.1单腿且不前进、下蹲单腿且变化小及其他已测Gen目标失败；README关联报告并明确当前未通过Gen验收 | CPU只读审查151个scalar tag、2265000个样本；区分训练总体MAE、存活与任务成功；给出静止高奖励解析反例、支撑约束缺口和最小后续诊断。未运行仿真/训练，未修改Python、config、NPZ或checkpoint；未将缺失的逐指令响应写成实测数值 |
 
 ### 10.2 实施进度与可执行入口
 
@@ -477,6 +478,8 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 随后用户明确确认：I003修复后的完整Viser命令可用，分别设置`MOTION_ID=0`、`1`、`2`可查看三条reference下的policy。D003据此保存可复用操作流程；该确认解决浏览器查看可用性问题，未提供定量误差、完整episode成功率或Stage2泛化结果，不将其写为全部训练目标已完成。
 
 Stage2追加：用户已有run `/home/han/pyx/HMI_clean_runs/loaded_4d/stage2/WholeBodyTracking/20261124_165511-g1_loaded_4d_stage2_joint-locomotion` 的 `model_20999.pt`。本地保存配置确认三reference、训练Track/Gen=0.5、Gen `axes=single`。I005新增的viewer入口以`track-ratio=0.0`、`--viser.config.loaded-4d-controls`运行同一个policy，默认持站立目标；选择预设后点击Apply执行。Gen中motion ID只控制reset初态；新目标不生成reference动画。600s episode上限仅为查看时CLI override，失败termination保留，UI显示reset次数，避免将多个重置片段视作持续成功。
+
+2026-11-25失败反馈与审查更新：用户确认该Stage2模型在Track下仍可跟踪reference，但已测试的Gen指令失败，尤其训练范围内`vx=0.1`出现单腿站立且没有前进，下蹲也呈单腿且变化很小。**当前不将Stage2标为成功的goal-conditioned controller。** [完整审查报告](https://github.com/Ir1222/HMI-carry/blob/feature/loaded-4d/HMI_LOADED_4D_STAGE2_TRACK_GEN_ANALYSIS.md) 区分用户物理观察、训练标量与解析计算：Gen末期平均episode约14.33s、总体vx MAE约0.03536m/s，不能证明固定目标成功；reward允许静止高分，Gen没有standing/squat支撑形态约束。现有数据支持优先检查奖励/目标分布和支撑缺口，但尚未通过新的物理评估或干预实验确认唯一根因。后续先做范围内单目标响应与姿态量化，再决定局部修正，不直接扩大速度范围或重写PPO。
 
 - Runtime默认：200Hz physics / decimation4 / 50Hz policy，原固定中心action；Stage1全Track，Stage2固定50/50；同一113D/315D observation schema。
 - Gen随机目标用0.8s smoothstep、height限速0.06m/s；外部每帧重定向使用连续限速，避免重启smoothstep造成停滞。外部目标与本步applied command分开保存。
