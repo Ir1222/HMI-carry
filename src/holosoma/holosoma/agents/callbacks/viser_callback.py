@@ -667,6 +667,10 @@ class EvalViserCallback(RLEvalCallback):
             "Turn right -0.2 rad/s": (0.0, 0.0, -0.2, height),
             "Squat 0.66 m": (0.0, 0.0, 0.0, 0.66),
         }
+        if getattr(cmd, 'options', {}).get('profile') == 'vxh':
+            presets = {name: value for name, value in presets.items() if name.startswith(('Stand', 'Forward'))}
+            presets.update({f'Height {h:.2f} m': (0., 0., 0., h) for h in (.60, .69, .80)})
+            gui.add_text('Training envelope', 'vx 0.1–0.8 at h=0.73; stationary h=0.60–0.80. Combinations unverified.', disabled=True)
         presets = {name: goal for name, goal in presets.items()
                    if np.all(np.asarray(goal, dtype=bounds.dtype) >= bounds[:, 0])
                    and np.all(np.asarray(goal, dtype=bounds.dtype) <= bounds[:, 1])}
@@ -676,7 +680,8 @@ class EvalViserCallback(RLEvalCallback):
         labels = ("vx (m/s)", "vy (m/s)", "yaw rate (rad/s)", "pelvis height (m)")
         self._loaded_inputs = [
             gui.add_slider(label, min=round(float(bounds[i, 0]), 6), max=round(float(bounds[i, 1]), 6), step=0.01,
-                           initial_value=initial[i])
+                           initial_value=initial[i]) if bounds[i, 0] != bounds[i, 1]
+            else gui.add_number(label, initial_value=initial[i], disabled=True)
             for i, label in enumerate(labels)
         ]
         apply_button = gui.add_button("Apply & hold command", hint="Apply all four values without a physical reset.")

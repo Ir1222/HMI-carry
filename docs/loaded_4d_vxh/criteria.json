@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "min_steady_s": 2.0,
+  "vy_mae_max": 0.05,
+  "yaw_mae_max": 0.15,
+  "foot_force_min": 20.0,
+  "foot_height_max": 0.025,
+  "foot_slip_max": 0.15,
+  "hand_local_min": [
+    [
+      0.2,
+      -0.02,
+      0.06
+    ],
+    [
+      -0.25,
+      -0.21,
+      0.01
+    ]
+  ],
+  "hand_local_max": [
+    [
+      0.25,
+      0.13,
+      0.13
+    ],
+    [
+      -0.12,
+      -0.09,
+      0.09
+    ]
+  ],
+  "hand_margin": 0.05,
+  "hand_speed_max": 0.35,
+  "box_tilt_max": 0.32,
+  "support_fraction_min": 0.9,
+  "carry_fraction_min": 0.95
+}

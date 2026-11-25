@@ -28,8 +28,9 @@ from holosoma.utils.simulator_config import SimulatorType
 @pytest.fixture
 def make_command(tmp_path):
     """Use the real NPZ loader/reset path with a tiny, independently built clip."""
-    def build(stage=2):
-        config = loaded_4d_preset(stage)
+    def build(stage=2, vxh=False):
+        from holosoma.config_values.wbt.g1.loaded_4d import loaded_4d_vxh_preset
+        config = loaded_4d_vxh_preset() if vxh else loaded_4d_preset(stage)
         robot = config.robot
         n, frames = 4, 5
         body_count = len(robot.body_names)
@@ -43,12 +44,15 @@ def make_command(tmp_path):
         body_quat[:, :, 0] = 1.0
         velocity = np.zeros_like(body_pos)
         velocity[:, :, 0] = 0.2
+        velocity[:, :, 1] = .07 if vxh else 0
+        angular_velocity = np.zeros_like(body_pos)
+        angular_velocity[:, :, 2] = .2 if vxh else 0
         box_pos = np.tile(np.array([0.35, 0.0, 0.85], dtype=np.float32), (frames, 1))
         box_quat = np.tile(np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32), (frames, 1))
         path = tmp_path / 'synthetic.npz'
         np.savez(path, fps=np.array([50.0]), joint_names=np.array(robot.dof_names), body_names=np.array(robot.body_names),
                  joint_pos=joints, joint_vel=np.zeros((frames, 35), dtype=np.float32),
-                 body_pos_w=body_pos, body_quat_w=body_quat, body_lin_vel_w=velocity, body_ang_vel_w=np.zeros_like(body_pos),
+                 body_pos_w=body_pos, body_quat_w=body_quat, body_lin_vel_w=velocity, body_ang_vel_w=angular_velocity,
                  object_pos_w=box_pos, object_quat_w=box_quat,
                  object_lin_vel_w=np.zeros_like(box_pos), object_ang_vel_w=np.zeros_like(box_pos))
         term = config.command.setup_terms['motion_command']
@@ -599,7 +603,7 @@ def test_evaluation_prints_original_error_before_simulator_cleanup(evaluation_mo
 
     monkeypatch.setattr(sim_utils, 'close_simulation_app', close)
     args = SimpleNamespace(checkpoint=str(tmp_path / 'model.pt'), mode='track', viewer=False,
-        seed=0, seconds=60., output=tmp_path / 'results.json')
+        seed=0, seconds=60., output=tmp_path / 'results.json', vxh_protocol=False)
     with pytest.raises(RuntimeError, match='original evaluation error'):
         evaluation_module.evaluate(args)
     assert cleaned == [True]
@@ -752,3 +756,113 @@ def test_viewer_readout_distinguishes_target_applied_measured_and_reset(manual_v
     assert 'Measured: [0.200' in text
     assert 'Episode step: 10' in text
     assert 'Resets (including initialization): 3' in text
+
+
+def test_vxh_preset_isolation_contract_and_track_rewards():
+    from holosoma.config_values.wbt.g1.loaded_4d import loaded_4d_vxh_preset
+    old, new, stage1 = loaded_4d_preset(2), loaded_4d_vxh_preset(), loaded_4d_preset(1)
+    assert old.command.setup_terms['motion_command'].params['loaded_4d'].get('profile') is None
+    assert new.observation == old.observation == stage1.observation
+    assert new.action == old.action and new.robot.control == old.robot.control
+    assert 'command_velocity' not in new.reward.terms
+    for key, term in old.reward.terms.items():
+        if not key.startswith('command_'): assert new.reward.terms[key] == term
+    from holosoma.config_values.experiment import DEFAULTS
+    assert 'g1_loaded_4d_stage2_vxh' in DEFAULTS
+
+
+def test_vxh_reset_zero_axes_track_unchanged_and_retargeting(make_command):
+    cmd, env, _ = make_command(vxh=True)
+    ids = torch.where(cmd.gen_env_mask)[0]
+    track = cmd.track_env_mask
+    assert torch.equal(cmd.task_command[track], cmd.reference_command()[track])
+    assert (cmd.task_command[track,1:3].abs() > 0).all()
+    assert (cmd.task_command[ids,1:3] == 0).all()
+    assert (cmd.applied_command[ids,1:3] == 0).all()
+    assert (cmd.target_command[ids,1:3] == 0).all()
+    cmd.task_command[ids] = torch.tensor([0.,0.,0.,.73])
+    for _ in range(10):
+        cmd.set_command([.4,0.,0.,.73])
+        before=cmd.task_command.clone()
+        cmd.begin_control_step()
+        cmd._advance_gen_commands()
+        assert torch.equal(cmd.applied_command,before)
+    assert torch.allclose(cmd.task_command[ids,0],torch.full((len(ids),),.06),atol=1e-6)
+    assert torch.equal(cmd.task_command[track],cmd.reference_command()[track])
+    assert env.simulator.writes == 1
+
+
+def test_vxh_random_external_same_transition_and_arrival_dwell(make_command):
+    cmd, env, _ = make_command(vxh=True)
+    ids = torch.where(cmd.gen_env_mask)[0]
+    a,b=ids.tolist()
+    cmd.task_command[ids] = torch.tensor([0.,0.,0.,.73])
+    cmd.target_command[ids] = torch.tensor([.8,0.,0.,.60])
+    cmd.external_command_mask[a]=True
+    cmd._dwell[ids]=3
+    for _ in range(100):
+        cmd._advance_gen_commands()
+        assert torch.equal(cmd.task_command[a],cmd.task_command[b])
+    assert cmd._dwell[b] == 3  # ramp has not arrived; dwell must not expire
+    assert cmd.task_command[b,0] == pytest.approx(.6,abs=1e-6)
+
+
+def test_vxh_quota_and_bins_do_not_sample_zero_axes(make_command):
+    cmd, _, _ = make_command(vxh=True)
+    torch.manual_seed(12)
+    ids=torch.where(cmd.gen_env_mask)[0]
+    for _ in range(4000): cmd._sample_gen_targets(ids)
+    probs=cmd.sample_counts/cmd.sample_counts.sum()
+    assert torch.allclose(probs,torch.tensor([.5,.4,.1,0]),atol=.02)
+    assert (cmd.sample_vx_hist/cmd.sample_vx_hist.sum()-.142857).abs().max()<.025
+    assert (cmd.sample_height_hist/cmd.sample_height_hist.sum()-.2).abs().max()<.025
+
+
+def test_vxh_support_walking_exempt_and_all_rewards_gen_only(make_command):
+    from holosoma.envs.wbt.loaded_4d import gen_constraint_penalty
+    cmd, env, _ = make_command(vxh=True)
+    sim=env.simulator
+    env._loaded_feet=[sim._body_list.index(s+'_ankle_roll_link') for s in ('left','right')]
+    env._loaded_hands=[sim._body_list.index(s+'_wrist_yaw_link') for s in ('left','right')]
+    env._loaded_sole_points=torch.tensor([[[-.04,-.026,-.035],[-.04,.026,-.035],[.12,-.026,-.035],[.12,.026,-.035]]]).reshape(1,1,4,3)
+    sim.contact_forces=torch.zeros(env.num_envs,len(sim._body_list),3)
+    sim.contact_forces[:,env._loaded_feet[0],2]=100
+    cmd._stationary_time[:]=0
+    assert (gen_constraint_penalty(env,'support')==0).all()  # single support during forward allowed
+    cmd._stationary_time[:]=2
+    cost=gen_constraint_penalty(env,'support')
+    assert (cost[cmd.gen_env_mask]>0).all() and (cost[cmd.track_env_mask]==0).all()
+    assert (gen_constraint_penalty(env,'carry')[cmd.track_env_mask]==0).all()
+    for part in ('vx','vy','height','yaw_rate'):
+        reward=command_tracking_reward(env,part,.1)
+        assert torch.isfinite(reward).all() and (reward[cmd.track_env_mask]==0).all()
+
+
+def test_task_success_requires_arrival_response_and_all_segments(evaluation_module):
+    target=[.4,0.,0.,.73]
+    rows=[{'time_s':.02*i, 'dt':.02, 'applied':[0.,0.,0.,.73], 'measured':target} for i in range(200)]
+    result=evaluation_module.summarize_segment(rows,target,{},.8)
+    assert not result['task_success'] and result['failure_reasons']==['no_steady_samples']
+    assert not evaluation_module.summarize_segment([],target,{},.8)['task_success']
+
+
+def test_vxh_success_rejects_standing_instead_of_forward_and_single_support(evaluation_module):
+    from pathlib import Path
+    c=json.loads((Path(__file__).resolve().parents[6]/'docs/loaded_4d_vxh/criteria.json').read_text())
+    def rows(goal):
+        return [{'time_s':i*.02,'dt':.02,'applied':goal,'measured':goal,
+                 'root_position':[i*.02*goal[0],0.,goal[3]],'root_heading':[1.,0.],
+                 'foot_force_z':[150.,150.],'foot_height':[.001,.001],'foot_slip':[.01,.01],
+                 'hand_box_local':((np.array(c['hand_local_min'])+c['hand_local_max'])/2).tolist(),
+                 'hand_box_speed':[.01,.01],'box_tilt':.1,'box_clearance':.3} for i in range(200)]
+    forward=[.4,0.,0.,.73]
+    good=rows(forward)
+    assert evaluation_module.summarize_segment(good,forward,c,.8)['task_success']
+    for r in good: r['measured']=[0.,0.,0.,.73];r['root_position'][0]=0
+    bad=evaluation_module.summarize_segment(good,forward,c,.8)
+    assert not bad['task_success'] and 'no_forward_motion' in bad['failure_reasons']
+    stand=[0.,0.,0.,.73]; one_leg=rows(stand)
+    for r in one_leg:r['foot_force_z'][1]=0
+    assert 'double_support' in evaluation_module.summarize_segment(one_leg,stand,c,.8)['failure_reasons']
+    for r in one_leg: r['applied']=forward; r['measured']=forward;r['root_position'][0]=r['time_s']*.4
+    assert evaluation_module.summarize_segment(one_leg,forward,c,.8)['task_success']

@@ -499,3 +499,26 @@ Stage2追加：用户已有run `/home/han/pyx/HMI_clean_runs/loaded_4d/stage2/Wh
 7. 后续实际验收仍按§8第3步起执行：小规模PhysX reset/rollout与保存恢复，再单技能/joint Stage1、独立Stage1评估、Stage2学习和连续command评估。本轮测试使用CPU数据与simulator double验证协议，**不能作为真实物理稳定或训练收敛证明**。
 
 实施提交说明均包含“修改内容、修改原因、核验结果、未完成事项”。首个核心实现commit为 `a099200`；评估及README完成记录为I002，其准确hash由 `git log feature/loaded-4d` 查询。完成后按用户授权普通push实现分支，不覆盖原main对照。
+
+### 10.3 I006：Stage2 VXH 独立实验实施（2026-11-25）
+
+用户已授权本轮代码、仿真、追加 15000 updates、评估及普通 commit/push。本节是 D004
+只读审查之后的新实施记录，不改变旧报告“当时未启动训练”的历史事实。
+
+新增 `exp:g1-loaded-4d-stage2-vxh`：只对 Gen 启用前进/原地高度/站立显式配额、
+统一随机/外部限速、零轴 reset 和到达后 dwell。Track 保留原 reference 四维条件与奖励。
+独立 vx/h 主奖励加少量零轴、原地支撑和实际手箱几何约束；保留 Gen tracking 常数、
+原 regularization/physical termination，未改 PPO、MLP、观测、动作、PD、频率或三条 NPZ。
+Viewer 增加 VXH 预设和固定零轴；评估增加明确 task_success、逐目标稳态/运动/支撑/持箱统计，
+未执行段不计成功。新增简单分段脚本记录累计预算，后续恢复 optimizer/std/normalizer。
+
+51 项针对性 CPU 回归通过，真实 Viser 控件 HTTP200；指定 Stage1 model_06000 的真实 PPO
+恢复审计通过，113D/315D/29D 和三 motion contract 正确，std mean=.0391273，首次 optimizer
+为空且 lr=1e-4。训练前真实 Stage1 30 trial 基线：continuous squat 9/10、locomotion 10/10、
+repeated squat 10/10；连续蹲起 seed0 在3.9s触发 bad_tracking。足底与箱体坐标定义核实后，
+标定阈值已在首个 Stage2 update 前冻结至 `docs/loaded_4d_vxh/criteria.json`。
+
+真实 64 env smoke 3 updates + 保存恢复2 updates通过，Adam step60→100，normalizer/std正常，
+935个scalar均有限。这5 updates计入本轮预算。随后8192 env恢复追加995 updates，形成累计1000
+短训；能力评估和后续训练继续记录到 [本轮结果](HMI_LOADED_4D_STAGE2_VXH_RESULTS.md)。
+本节不把测试通过、存活或训练启动解释为可用 Gen 控制策略；全部验收依逐目标实际结果。

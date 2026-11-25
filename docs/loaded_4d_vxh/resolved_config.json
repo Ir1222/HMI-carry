@@ -1,0 +1,585 @@
+{
+  "source_saved_config": "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/short_1000/WholeBodyTracking/20261125_145544-g1_loaded_4d_stage2_vxh-locomotion/holosoma_config.yaml",
+  "experiment": "exp:g1-loaded-4d-stage2-vxh",
+  "training": {
+    "checkpoint": "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/smoke_resume/WholeBodyTracking/20261125_145417-g1_loaded_4d_stage2_vxh-locomotion/model_06003.pt",
+    "export_onnx": true,
+    "headless": true,
+    "max_eval_steps": null,
+    "multigpu": false,
+    "name": "g1_loaded_4d_stage2_vxh",
+    "num_envs": 8192,
+    "project": "WholeBodyTracking",
+    "seed": 42,
+    "torch_deterministic": false
+  },
+  "command": {
+    "params": {},
+    "reset_terms": {
+      "motion_command": {
+        "func": "holosoma.managers.command.terms.loaded_4d:Loaded4DCommand",
+        "params": {}
+      }
+    },
+    "setup_terms": {
+      "motion_command": {
+        "func": "holosoma.managers.command.terms.loaded_4d:Loaded4DCommand",
+        "params": {
+          "expected_motions": {
+            "continuous_grasped_squat_stand.npz": {
+              "frames": 351,
+              "sha256": "412681d73670e24c4a32401970710513ba9e3c2dd8b3205e2bf4c4a6a4f33a90"
+            },
+            "loaded_locomotion.npz": {
+              "frames": 110,
+              "sha256": "fe03f9072560cc75096c5a0cbcd1ae781a1fe9607c23fa8781ed257ebed98550"
+            },
+            "repeated_grasped_squat_stand.npz": {
+              "frames": 651,
+              "sha256": "d6238a97fa785d94cdf9579f82c002f2b088c34267ba35465e0ed350932ca835"
+            }
+          },
+          "loaded_4d": {
+            "axes": "single",
+            "box_clearance": 0.02,
+            "category_probabilities": [
+              0.5,
+              0.4,
+              0.1,
+              0.0
+            ],
+            "combined_targets": [],
+            "constraints": {
+              "box_tilt_max": 0.32,
+              "foot_force_min": 20.0,
+              "foot_height_max": 0.025,
+              "foot_slip_max": 0.15,
+              "hand_local_max": [
+                [
+                  0.25,
+                  0.13,
+                  0.13
+                ],
+                [
+                  -0.12,
+                  -0.09,
+                  0.09
+                ]
+              ],
+              "hand_local_min": [
+                [
+                  0.2,
+                  -0.02,
+                  0.06
+                ],
+                [
+                  -0.25,
+                  -0.21,
+                  0.01
+                ]
+              ],
+              "hand_margin": 0.05,
+              "hand_speed_max": 0.35,
+              "support_grace_s": 0.5,
+              "support_ramp_s": 0.5,
+              "support_vx_max": 0.03
+            },
+            "diagnostics": true,
+            "dwell_s": [
+              3.0,
+              5.0
+            ],
+            "external_ranges": [
+              [
+                0.0,
+                0.8
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                0.6,
+                0.8
+              ]
+            ],
+            "fall_height": 0.4,
+            "forward_range": [
+              0.1,
+              0.8
+            ],
+            "height_rate": 0.06,
+            "max_box_separation": 1.0,
+            "min_upright": 0.2,
+            "profile": "vxh",
+            "ranges": [
+              [
+                0.0,
+                0.8
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                0.6,
+                0.8
+              ]
+            ],
+            "slew_rates": [
+              0.3,
+              0.3,
+              0.6,
+              0.06
+            ],
+            "stand_height": 0.73,
+            "stand_probability": 0.2,
+            "transition_s": 0.8
+          },
+          "motion_config": {
+            "adaptive_timestep_sampler": {
+              "bin_uniform_mix": 0.1,
+              "bin_width_s": 1.0,
+              "dump_file": "sampleweight.txt",
+              "dump_interval": 100,
+              "ema_alpha": 0.01,
+              "min_segment_steps": 10,
+              "motion_uniform_mix": 0.1,
+              "score_power": 1.0,
+              "update_interval": 10
+            },
+            "body_name_ref": [
+              "torso_link"
+            ],
+            "body_names_to_track": [
+              "pelvis",
+              "left_hip_roll_link",
+              "left_knee_link",
+              "left_ankle_roll_link",
+              "right_hip_roll_link",
+              "right_knee_link",
+              "right_ankle_roll_link",
+              "torso_link",
+              "left_shoulder_roll_link",
+              "left_elbow_link",
+              "left_wrist_yaw_link",
+              "right_shoulder_roll_link",
+              "right_elbow_link",
+              "right_wrist_yaw_link"
+            ],
+            "default_pose_append_duration_s": 2.0,
+            "default_pose_prepend_duration_s": 2.0,
+            "enable_default_pose_append": false,
+            "enable_default_pose_prepend": false,
+            "enable_terminal_pose_hold": false,
+            "eval_fixed_reset": {
+              "bin_id": null,
+              "enabled": false,
+              "local_frame": null,
+              "motion_id": 0,
+              "randomize_within_bin": true
+            },
+            "eval_sample_random_timestep": false,
+            "freeze_at_timestep_zero_prob": 0.0,
+            "goal_orientation": {
+              "object_yaw_only": false,
+              "robot_yaw_only": false
+            },
+            "hybrid": {
+              "env_partition_seed": 0,
+              "gen_start_at_timestep_zero_prob": 0.2,
+              "gen_step_zero_root_noise": null,
+              "object_goal_noise": {
+                "pos_clip_xyz": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "pos_std_xyz": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rpy_clip": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rpy_std": [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              },
+              "robot_goal_noise": {
+                "pos_clip_xyz": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "pos_std_xyz": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rpy_clip": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "rpy_std": [
+                  0.0,
+                  0.0,
+                  0.0
+                ]
+              },
+              "size_randomization": {
+                "enabled": false,
+                "gen_scale_range": [
+                  0.85,
+                  1.15
+                ],
+                "ground_clearance": 0.001,
+                "ground_contact_tolerance": 0.02,
+                "mode": "uniform_xyz",
+                "sampling_seed": 0,
+                "track_scale_range": [
+                  0.95,
+                  1.05
+                ]
+              },
+              "track_ratio": 0.5
+            },
+            "load_fixed_scene_from_motion": false,
+            "motion_dir": "/home/han/pyx/HMI_clean/datasets/loaded_4d/joint",
+            "motion_file": "/home/han/pyx/HMI_clean/datasets/loaded_4d/joint/loaded_locomotion.npz",
+            "noise_to_initial_pose": {
+              "dof_pos": 0.0,
+              "object_pos": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "overall_noise_scale": 0.0,
+              "root_ang_vel": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "root_lin_vel": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "root_pos": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "root_rot": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "step_zero_root_noise": null
+            },
+            "start_at_timestep_zero_prob": 0.05,
+            "terminal_pose_hold_duration_s": 1.0,
+            "use_adaptive_timesteps_sampler": true
+          }
+        }
+      }
+    },
+    "step_terms": {
+      "motion_command": {
+        "func": "holosoma.managers.command.terms.loaded_4d:Loaded4DCommand",
+        "params": {}
+      }
+    }
+  },
+  "reward": {
+    "only_positive_rewards": false,
+    "terms": {
+      "action_rate_l2": {
+        "func": "holosoma.managers.reward.terms.wbt:penalty_action_rate",
+        "params": {},
+        "tags": [],
+        "weight": -0.1
+      },
+      "command_height": {
+        "func": "holosoma.envs.wbt.loaded_4d:command_tracking_reward",
+        "params": {
+          "component": "height",
+          "sigma": 0.05
+        },
+        "tags": [],
+        "weight": 1.0
+      },
+      "command_vx": {
+        "func": "holosoma.envs.wbt.loaded_4d:command_tracking_reward",
+        "params": {
+          "component": "vx",
+          "sigma": 0.1
+        },
+        "tags": [],
+        "weight": 2.0
+      },
+      "command_vy": {
+        "func": "holosoma.envs.wbt.loaded_4d:command_tracking_reward",
+        "params": {
+          "component": "vy",
+          "sigma": 0.1
+        },
+        "tags": [],
+        "weight": 0.3
+      },
+      "command_yaw_rate": {
+        "func": "holosoma.envs.wbt.loaded_4d:command_tracking_reward",
+        "params": {
+          "component": "yaw_rate",
+          "sigma": 0.3
+        },
+        "tags": [],
+        "weight": 0.3
+      },
+      "gen_carry": {
+        "func": "holosoma.envs.wbt.loaded_4d:gen_constraint_penalty",
+        "params": {
+          "component": "carry"
+        },
+        "tags": [],
+        "weight": -0.5
+      },
+      "gen_support": {
+        "func": "holosoma.envs.wbt.loaded_4d:gen_constraint_penalty",
+        "params": {
+          "component": "support"
+        },
+        "tags": [],
+        "weight": -0.5
+      },
+      "limits_dof_pos": {
+        "func": "holosoma.managers.reward.terms.wbt:limits_dof_pos",
+        "params": {
+          "soft_dof_pos_limit": 1.0
+        },
+        "tags": [],
+        "weight": -10.0
+      },
+      "motion_global_body_ang_vel": {
+        "func": "holosoma.managers.reward.terms.wbt:hybrid_motion_global_body_ang_vel",
+        "params": {
+          "sigma": 3.14
+        },
+        "tags": [],
+        "weight": 1.0
+      },
+      "motion_global_body_lin_vel": {
+        "func": "holosoma.managers.reward.terms.wbt:hybrid_motion_global_body_lin_vel",
+        "params": {
+          "sigma": 1.0
+        },
+        "tags": [],
+        "weight": 1.0
+      },
+      "motion_global_ref_orientation_error_exp": {
+        "func": "holosoma.managers.reward.terms.wbt:hybrid_motion_global_ref_orientation_error_exp",
+        "params": {
+          "sigma": 0.4
+        },
+        "tags": [],
+        "weight": 0.5
+      },
+      "motion_global_ref_position_error_exp": {
+        "func": "holosoma.managers.reward.terms.wbt:hybrid_motion_global_ref_position_error_exp",
+        "params": {
+          "sigma": 0.3
+        },
+        "tags": [],
+        "weight": 0.5
+      },
+      "motion_relative_body_orientation_error_exp": {
+        "func": "holosoma.managers.reward.terms.wbt:hybrid_motion_relative_body_orientation_error_exp",
+        "params": {
+          "sigma": 0.4
+        },
+        "tags": [],
+        "weight": 1.0
+      },
+      "motion_relative_body_position_error_exp": {
+        "func": "holosoma.managers.reward.terms.wbt:hybrid_motion_relative_body_position_error_exp",
+        "params": {
+          "sigma": 0.3
+        },
+        "tags": [],
+        "weight": 1.0
+      },
+      "object_global_ref_orientation_error_exp": {
+        "func": "holosoma.managers.reward.terms.wbt:hybrid_object_global_ref_orientation_error_exp",
+        "params": {
+          "sigma": 0.4
+        },
+        "tags": [],
+        "weight": 1.0
+      },
+      "object_global_ref_position_error_exp": {
+        "func": "holosoma.managers.reward.terms.wbt:hybrid_object_global_ref_position_error_exp",
+        "params": {
+          "sigma": 0.3
+        },
+        "tags": [],
+        "weight": 1.0
+      },
+      "undesired_contacts": {
+        "func": "holosoma.managers.reward.terms.wbt:UndesiredContacts",
+        "params": {
+          "threshold": 1.0,
+          "undesired_contacts_body_names": "^(?!left_foot_contact_point$)(?!right_foot_contact_point$)(?!left_wrist_yaw_link$)(?!right_wrist_yaw_link$)(?!left_ankle_roll_link$)(?!right_ankle_roll_link$).+$"
+        },
+        "tags": [],
+        "weight": -0.1
+      }
+    }
+  },
+  "ppo": {
+    "_recursive_": false,
+    "_target_": "holosoma.agents.ppo.ppo.PPO",
+    "config": {
+      "actor_learning_rate": 0.0001,
+      "actor_optimizer": {
+        "_target_": "torch.optim.AdamW",
+        "weight_decay": 0.0
+      },
+      "clip_param": 0.2,
+      "critic_learning_rate": 0.0001,
+      "critic_optimizer": {
+        "_target_": "torch.optim.AdamW",
+        "weight_decay": 0.0
+      },
+      "desired_kl": 0.01,
+      "empirical_normalization": true,
+      "entropy_coef": 0.002,
+      "eval_callbacks": null,
+      "gamma": 0.99,
+      "init_at_random_ep_len": false,
+      "init_noise_std": 1.0,
+      "lam": 0.95,
+      "latest_save_interval": 100,
+      "load_optimizer": true,
+      "max_actor_learning_rate": null,
+      "max_critic_learning_rate": null,
+      "max_grad_norm": 1.0,
+      "min_actor_learning_rate": null,
+      "min_critic_learning_rate": null,
+      "module_dict": {
+        "actor": {
+          "input_dim": [
+            "actor_obs"
+          ],
+          "layer_config": {
+            "activation": "ELU",
+            "dropout_prob": 0.0,
+            "encoder_activation": "ELU",
+            "encoder_hidden_dims": null,
+            "encoder_input_name": "",
+            "encoder_output_dim": null,
+            "hidden_channels": null,
+            "hidden_dims": [
+              512,
+              256,
+              128
+            ],
+            "input_channels": 1,
+            "input_height": 1,
+            "input_width": 1,
+            "kernel_size": 3,
+            "module_input_name": [],
+            "padding": "same",
+            "stride": 1,
+            "use_layer_norm": false
+          },
+          "min_mean_noise_std": null,
+          "min_noise_std": null,
+          "output_dim": [
+            "robot_action_dim"
+          ],
+          "type": "MLP"
+        },
+        "critic": {
+          "input_dim": [
+            "critic_obs"
+          ],
+          "layer_config": {
+            "activation": "ELU",
+            "dropout_prob": 0.0,
+            "encoder_activation": "ELU",
+            "encoder_hidden_dims": null,
+            "encoder_input_name": "",
+            "encoder_output_dim": null,
+            "hidden_channels": null,
+            "hidden_dims": [
+              512,
+              256,
+              128
+            ],
+            "input_channels": 1,
+            "input_height": 1,
+            "input_width": 1,
+            "kernel_size": 3,
+            "module_input_name": [],
+            "padding": "same",
+            "stride": 1,
+            "use_layer_norm": false
+          },
+          "min_mean_noise_std": null,
+          "min_noise_std": null,
+          "output_dim": [
+            1
+          ],
+          "type": "MLP"
+        }
+      },
+      "num_learning_epochs": 5,
+      "num_learning_iterations": 995,
+      "num_mini_batches": 4,
+      "num_steps_per_env": 24,
+      "reset_policy_std_on_resume": false,
+      "save_interval": 1000,
+      "schedule": "adaptive",
+      "symmetry_actor_coef": 1.0,
+      "symmetry_critic_coef": 0.0,
+      "use_symmetry": false,
+      "value_loss_coef": 1.0
+    }
+  },
+  "physics": {
+    "control_decimation": 4,
+    "fps": 200,
+    "max_episode_length_s": 15.0,
+    "physx": {
+      "bounce_threshold_velocity": 0.5,
+      "enable_dof_force_sensors": false,
+      "num_position_iterations": 8,
+      "num_threads": 4,
+      "num_velocity_iterations": 4,
+      "solver_type": 1
+    },
+    "render_interval": 4,
+    "render_mode": "human",
+    "substeps": 1
+  },
+  "observation_dimensions": [
+    113,
+    315
+  ],
+  "action_dimensions": 29,
+  "frozen_criteria": "docs/loaded_4d_vxh/criteria.json"
+}

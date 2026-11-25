@@ -1,0 +1,218 @@
+{
+  "source_checkpoint": "/home/han/pyx/HMI_clean_runs/loaded_4d/stage1/WholeBodyTracking/20261124_105123-g1_loaded_4d_stage1_joint-locomotion/model_06000.pt",
+  "source_file": "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/calibration/stage1_track.json",
+  "source_completion_fraction": 0.9666666666666667,
+  "source_trials": 30,
+  "sensor_definition": "Ankle-roll net world vertical contact force; four sole probes at z=-.035; box-local wrist geometry (not filtered hand-box contact); box vertical-axis tilt acos(abs(local_z dot gravity_up)), because reference local z points down.",
+  "derivation": "Before Stage2 training: squat p99 + .01m sole / .05m/s slip, capped .05m/.35m/s; carry union reference and Stage1 q.001-.999 rounded out +.01m; .05m acceptance margin; Stage1 p99 speed/tilt +.1 with floors .35m/s/.30rad. 20N excludes light touch, no equal-load condition.",
+  "statistics": {
+    "foot_force_z": {
+      "p01": [
+        97.78253967285156,
+        193.91353271484374
+      ],
+      "p50": [
+        116.64750671386719,
+        220.35606384277344
+      ],
+      "p99": [
+        145.72978088378903,
+        241.09428405761716
+      ]
+    },
+    "foot_height": {
+      "p01": [
+        3.1042098999023436e-06,
+        0.0001787714660167694
+      ],
+      "p50": [
+        0.0014869347214698792,
+        0.00035271793603897095
+      ],
+      "p99": [
+        0.006610466837882974,
+        0.004675008952617544
+      ]
+    },
+    "foot_slip": {
+      "p01": [
+        0.000983578572049737,
+        0.0038467333931475876
+      ],
+      "p50": [
+        0.008492561057209969,
+        0.007619370706379414
+      ],
+      "p99": [
+        0.0890843331813812,
+        0.043728638440370504
+      ]
+    },
+    "hand_box_speed": {
+      "p01": [
+        0.0010708910133689642,
+        0.0013921386701986193
+      ],
+      "p50": [
+        0.008714880794286728,
+        0.010659012012183666
+      ],
+      "p99": [
+        0.0638100391626357,
+        0.07461759865283955
+      ]
+    },
+    "box_tilt": {
+      "p01": 0.09472296702903021,
+      "p50": 0.15906712950617266,
+      "p99": 0.2156692695801044
+    }
+  },
+  "reference_hand_local": {
+    "continuous_grasped_squat_stand.npz": {
+      "min": [
+        [
+          0.2184300720691681,
+          0.11252719163894653,
+          0.07474168390035629
+        ],
+        [
+          -0.23170346021652222,
+          -0.1058930903673172,
+          0.055084094405174255
+        ]
+      ],
+      "max": [
+        [
+          0.21843686699867249,
+          0.1125573217868805,
+          0.07475314289331436
+        ],
+        [
+          -0.23168113827705383,
+          -0.10587537288665771,
+          0.05509404093027115
+        ]
+      ]
+    },
+    "loaded_locomotion.npz": {
+      "min": [
+        [
+          0.21073254942893982,
+          -0.00924094021320343,
+          0.08396526426076889
+        ],
+        [
+          -0.15204191207885742,
+          -0.19501808285713196,
+          0.06526794284582138
+        ]
+      ],
+      "max": [
+        [
+          0.2187732607126236,
+          0.005955368280410767,
+          0.10749664902687073
+        ],
+        [
+          -0.13276976346969604,
+          -0.1769271343946457,
+          0.0785183534026146
+        ]
+      ]
+    },
+    "repeated_grasped_squat_stand.npz": {
+      "min": [
+        [
+          0.2184300720691681,
+          0.11252719163894653,
+          0.07474168390035629
+        ],
+        [
+          -0.23170346021652222,
+          -0.1058930903673172,
+          0.055084094405174255
+        ]
+      ],
+      "max": [
+        [
+          0.21843686699867249,
+          0.1125573217868805,
+          0.07475314289331436
+        ],
+        [
+          -0.23168113827705383,
+          -0.10587537288665771,
+          0.05509404093027115
+        ]
+      ]
+    }
+  },
+  "criteria": {
+    "version": 1,
+    "min_steady_s": 2.0,
+    "vy_mae_max": 0.05,
+    "yaw_mae_max": 0.15,
+    "foot_force_min": 20.0,
+    "foot_height_max": 0.025,
+    "foot_slip_max": 0.15,
+    "hand_local_min": [
+      [
+        0.2,
+        -0.02,
+        0.06
+      ],
+      [
+        -0.25,
+        -0.21,
+        0.01
+      ]
+    ],
+    "hand_local_max": [
+      [
+        0.25,
+        0.13,
+        0.13
+      ],
+      [
+        -0.12,
+        -0.09,
+        0.09
+      ]
+    ],
+    "hand_margin": 0.05,
+    "hand_speed_max": 0.35,
+    "box_tilt_max": 0.32,
+    "support_fraction_min": 0.9,
+    "carry_fraction_min": 0.95
+  },
+  "track_results": [
+    {
+      "motion": "continuous_grasped_squat_stand.npz",
+      "completed": 9,
+      "trials": 10,
+      "body_object_mae": [
+        0.04856349863111973,
+        0.05725613757967949
+      ]
+    },
+    {
+      "motion": "loaded_locomotion.npz",
+      "completed": 10,
+      "trials": 10,
+      "body_object_mae": [
+        0.03686257191002369,
+        0.033762441202998164
+      ]
+    },
+    {
+      "motion": "repeated_grasped_squat_stand.npz",
+      "completed": 10,
+      "trials": 10,
+      "body_object_mae": [
+        0.048420819267630574,
+        0.055225464329123494
+      ]
+    }
+  ]
+}

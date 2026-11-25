@@ -1,0 +1,15 @@
+{
+  "checkpoint": "/home/han/pyx/HMI_clean_runs/loaded_4d/stage1/WholeBodyTracking/20261124_105123-g1_loaded_4d_stage1_joint-locomotion/model_06000.pt",
+  "loaded_iteration": 6000,
+  "restored_exactly": {
+    "actor": true,
+    "critic": true,
+    "actor_obs_normalizer": true,
+    "critic_obs_normalizer": true
+  },
+  "optimizer_states": 0,
+  "actor_lr": 0.0001,
+  "critic_lr": 0.0001,
+  "std_mean": 0.03912725672125816,
+  "note": "Real PPO.load on CPU with dimension adapter; full environment contract also checked by simulation baseline/smoke."
+}

@@ -169,6 +169,111 @@ python src/holosoma/holosoma/train_agent.py \
 这些短训练不作为收敛验收。单技能 checkpoint 与 joint 的数据集合不同，当前 contract
 会拒绝直接混用；主实验应使用 joint preset 从头训练。
 
+### Stage 2 VXH：本轮独立实验（实现与实际结果持续记录）
+
+入口 `exp:g1-loaded-4d-stage2-vxh` 只限制 Gen：50% 前进 `vx=0.1–0.8,h=0.73`、
+40% 原地高度 `h=0.60–0.80`、10% 持箱站立。Track/Gen 仍为 50/50，Track 使用
+原 reference 四维指令和 tracking reward。两个零轴是速度约束，不是位置／朝向闭环。
+训练与手动输入统一用显式限速 `[0.3,0.3,0.6,0.06]`，单位为对应指令单位/s；
+vy/yaw command 在 Gen reset 时直接归零，不改实际物理速度。到达目标后再保持 3–5 s。
+前进和高度组合未验收；手动输入不会被按高度静默缩小。
+
+新 Gen 任务奖励为独立 vx（sigma=.10，weight=2）、pelvis height（.05，1）、
+零 vy（.10，.3）、零 heading yaw-rate（.30，.3）；另加支撑及实际手箱几何软成本
+（各 weight=-.5），保留动作正则和 3.5/s Gen tracking 常数。支撑只按 applied vx
+近零触发，先留 .5 s 落脚宽限，再用 .5 s 平滑启用。手箱指标没有过滤接触传感器，
+不能解释为已证实双手摩擦承重。训练前标定及冻结验收阈值见
+[本轮标定](docs/loaded_4d_vxh/calibration_summary.json) 和
+[验收标准](docs/loaded_4d_vxh/criteria.json)。旧 Stage2 preset 和报告保留。
+
+从 Stage1 首次迁移（下面直接训练 1000 updates；已开始的实验请用续训命令）：
+
+```bash
+cd /home/han/pyx/HMI_clean
+source /home/han/pyx/HMI_clean_runtime/activate.sh
+STAGE1=/home/han/pyx/HMI_clean_runs/loaded_4d/stage1/WholeBodyTracking/20261124_105123-g1_loaded_4d_stage1_joint-locomotion/model_06000.pt
+bash scripts_run/train_loaded_4d_vxh.sh transfer "$STAGE1" 1000 short_new 8192
+```
+
+脚本实际使用 `--algo.config.load-optimizer=False` 和
+`--algo.config.reset-policy-std-on-resume=False`，恢复网络、normalizers、learned std，
+新 optimizer 的 Actor/Critic 学习率均为 `1e-4`。脚本拒绝覆盖已有分段目录。
+若直接运行原训练入口，追加同样两个选项及
+`--logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh`。
+
+继续同一 VXH 实验（把 `CHECKPOINT` 设为本轮结果记录中的真实路径）：
+
+```bash
+cd /home/han/pyx/HMI_clean
+source /home/han/pyx/HMI_clean_runtime/activate.sh
+CHECKPOINT=/absolute/path/to/stage2_vxh/model.pt
+bash scripts_run/train_loaded_4d_vxh.sh resume "$CHECKPOINT" 1500 continuation_new 8192
+```
+
+`resume` 恢复 optimizer、std 和 normalizers。`num-learning-iterations` 是本段追加
+updates；原 PPO 会从保存的显示 iteration 再开始编号。按每段 `segment.json` 中的
+`completed_updates` 累加本轮 15000 预算，不能按最大编号减 6000；smoke 若继续使用也计入预算。
+每段输出 `checkpoint.txt`，保存其最终 checkpoint；这只是恢复入口，不是“最佳模型”判断。
+
+六个独立目标评估（每目标 10 trial，mean action，固定 locomotion frame 0、seed 0–9）：
+
+```bash
+cd /home/han/pyx/HMI_clean
+source /home/han/pyx/HMI_clean_runtime/activate.sh
+CHECKPOINT=/absolute/path/to/stage2_vxh/model.pt
+python scripts_run/evaluate_loaded_4d.py --checkpoint "$CHECKPOINT" \
+  --mode gen --suite vxh-targets --motion-id 1 --start-frames 0 \
+  --seconds 15 --trials 10 --seed 0 --criteria docs/loaded_4d_vxh/criteria.json \
+  --output /home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/eval_targets.json
+```
+
+单独目标可用 `--sequence /path/one_target.json` 替代 `--suite vxh-targets`，JSON 例如
+`[[0.1,0,0,0.73]]`。`--vxh-protocol` 仅用于以 Stage1 权重作新 command 协议的诊断对照。
+`task_success` 检查到达目标后的响应、支撑、持箱和无失败；`horizon_complete` 仅说明存活。
+全部控制步用于验收，10 Hz trace 保存 Target/Applied/Measured、实际位移、脚力／高度／滑移、
+box-local wrist geometry、箱体姿态和 clearance。未执行的后续目标不计成功。
+
+连续控制与 Track 保持分别执行：
+
+```bash
+python scripts_run/evaluate_loaded_4d.py --checkpoint "$CHECKPOINT" \
+  --mode gen --suite vxh-sequence --motion-id 1 --seconds 70 --trials 10 \
+  --criteria docs/loaded_4d_vxh/criteria.json \
+  --output /home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/eval_sequence.json
+python scripts_run/evaluate_loaded_4d.py --checkpoint "$CHECKPOINT" \
+  --mode track --trials 10 --start-frames 0 --seed 0 \
+  --output /home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/eval_track.json
+```
+
+连续序列是站立→0.1→0.4→停止→h=.60→h=.80→再次前进，中途不 reset。
+新 checkpoint 的 Viser 命令如下，网页为 http://localhost:8012；只有 vx 和 height 可编辑，
+另外两轴显示固定零，预设包含三个速度和三个高度。控件显示训练范围，不代表范围已全部通过。
+
+```bash
+cd /home/han/pyx/HMI_clean
+source /home/han/pyx/HMI_clean_runtime/activate.sh
+CHECKPOINT=/absolute/path/to/stage2_vxh/model.pt
+python src/holosoma/holosoma/eval_agent.py --checkpoint="$CHECKPOINT" \
+  --viser.config.enabled --viser.config.loaded-4d-controls --viser.config.no-show-reference \
+  --viser.config.port=8012 --viser.config.num-envs=1 --training.num-envs=1 \
+  --training.headless=True --training.max-eval-steps=30000 --training.export-onnx=False \
+  --simulator.config.sim.max-episode-length-s=600.0 \
+  --logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/viewer \
+  --command.setup-terms.motion-command.params.motion-config.hybrid.track-ratio=0.0 \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.enabled=True \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.motion-id=1 \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.bin-id=None \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.local-frame=0 \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.randomize-within-bin=False
+python -m tensorboard.main --logdir=/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh \
+  --host=127.0.0.1 --port=6020 --load_fast=false
+```
+
+TensorBoard 单独终端运行，访问 http://localhost:6020。重点检查
+`Env/loaded_4d/gen_reward_rate/*`、`Env/loaded_4d/sampled/*` 与逐目标评估，
+不要仅凭总分或平均存活时间选 checkpoint。实际训练、结果和未通过项见
+[本轮结果记录](HMI_LOADED_4D_STAGE2_VXH_RESULTS.md)。
+
 ### Stage 2：从新的 joint Stage 1 checkpoint 迁移
 
 将示例路径替换为**本实现**训练并验收后的 joint Stage 1 checkpoint：

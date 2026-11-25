@@ -117,6 +117,29 @@ class Loaded4DCommand(HybridMotionCommand):
                 raise ValueError("Loaded-4D ranges must be finite ordered [4, 2] bounds")
         if (self._ranges[:, 0] < self._external_ranges[:, 0]).any() or (self._ranges[:, 1] > self._external_ranges[:, 1]).any():
             raise ValueError("Sampler ranges must fit inside the external command envelope")
+        self.vxh = self.options.get('profile') == 'vxh'
+        self._stationary_time = torch.zeros(self.num_envs, device=self.device)
+        self.target_category = torch.full((self.num_envs,), -1, dtype=torch.long, device=self.device)
+        self.sample_counts = torch.zeros(4, device=self.device)
+        self.sample_vx_hist = torch.zeros(7, device=self.device)
+        self.sample_height_hist = torch.zeros(5, device=self.device)
+        if self.vxh:
+            self.rates = torch.tensor(self.options['slew_rates'], device=self.device)
+            self.category_probabilities = torch.tensor(self.options['category_probabilities'], device=self.device)
+            if self.rates.shape != (4,) or not torch.isfinite(self.rates).all() or (self.rates <= 0).any():
+                raise ValueError('VXH slew_rates must contain four finite positive rates')
+            if (self.category_probabilities.shape != (4,) or not torch.isfinite(self.category_probabilities).all()
+                    or (self.category_probabilities < 0).any() or not torch.isclose(self.category_probabilities.sum(), torch.tensor(1., device=self.device))):
+                raise ValueError('VXH category probabilities must sum to one')
+            if (self._ranges[1:3] != 0).any() or (self._external_ranges[1:3] != 0).any():
+                raise ValueError('VXH Gen lateral/yaw ranges must be zero')
+            self.combined_targets = torch.tensor(self.options.get('combined_targets', []), device=self.device)
+            if self.category_probabilities[3] > 0:
+                if (self.combined_targets.ndim != 2 or self.combined_targets.shape[1] != 4
+                        or not torch.isfinite(self.combined_targets).all()
+                        or (self.combined_targets < self._ranges[:, 0]).any()
+                        or (self.combined_targets > self._ranges[:, 1]).any()):
+                    raise ValueError('Combined targets must be explicitly listed inside the envelope')
         self.transition_s = float(self.options.get("transition_s", 0.8))
         self.height_rate = float(self.options.get("height_rate", 0.06))
         self.stand_height = float(self.options.get("stand_height", 0.73))
@@ -158,6 +181,11 @@ class Loaded4DCommand(HybridMotionCommand):
         self.physical_reset_count[ids] += 1
         self.external_command_mask[ids] = False
         self.task_command[ids] = self.reference_command()[ids]
+        gen_ids = ids[self.gen_env_mask[ids]]
+        if self.vxh:
+            self.task_command[gen_ids, 1:3] = 0
+            self.task_command[gen_ids, 0] = self.task_command[gen_ids, 0].clamp(*self.options['ranges'][0])
+        self._stationary_time[ids] = 0
         self.applied_command[ids] = self.task_command[ids]
         self.target_command[ids] = self.task_command[ids]
         gen_ids = ids[self.gen_env_mask[ids]]
@@ -167,6 +195,9 @@ class Loaded4DCommand(HybridMotionCommand):
     def begin_control_step(self):
         """Snapshot exactly the command present in the observation acted upon."""
         self.applied_command.copy_(self.task_command)
+        if self.vxh:
+            stationary = self.gen_env_mask & (self.applied_command[:, 0].abs() < self.options['constraints']['support_vx_max'])
+            self._stationary_time[:] = torch.where(stationary, self._stationary_time + self._env.dt, 0.)
 
     def advance_reference_to_post_action(self, token):
         if token == self._last_advanced_token:
@@ -194,6 +225,9 @@ class Loaded4DCommand(HybridMotionCommand):
     def _sample_gen_targets(self, ids):
         if not ids.numel():
             return
+        if self.vxh:
+            self._sample_vxh_targets(ids)
+            return
         target = self._ranges[:, 0] + torch.rand(len(ids), 4, device=self.device) * (self._ranges[:, 1] - self._ranges[:, 0])
         count = {"single": 1, "pair": 2, "combined": 4}[self.axes]
         chosen = torch.rand(len(ids), 4, device=self.device).argsort(dim=1)[:, :count]
@@ -213,11 +247,46 @@ class Loaded4DCommand(HybridMotionCommand):
         low, high = self.dwell_s
         self._dwell[ids] = low + (high - low) * torch.rand(len(ids), device=self.device)
 
+    def _sample_vxh_targets(self, ids):
+        n = len(ids)
+        category = torch.multinomial(self.category_probabilities, n, replacement=True)
+        target = torch.zeros(n, 4, device=self.device)
+        target[:, 3] = self.stand_height
+        # Uniform bins and uniform values within bins; zero axes never consume a quota.
+        vb = torch.randint(7, (n,), device=self.device)
+        hb = torch.randint(5, (n,), device=self.device)
+        vmin, vmax = self.options['forward_range']
+        hmin, hmax = self.options['ranges'][3]
+        forward, height, combined = category == 0, category == 1, category == 3
+        target[forward, 0] = vmin + (vb[forward] + torch.rand(n, device=self.device)[forward]) * (vmax-vmin)/7
+        target[height, 3] = hmin + (hb[height] + torch.rand(n, device=self.device)[height]) * (hmax-hmin)/5
+        if self.combined_targets.numel():
+            choices = torch.randint(len(self.combined_targets), (n,), device=self.device)
+            target[combined] = self.combined_targets[choices[combined]]
+        self.target_command[ids] = target  # final targets; no height-dependent vx rewriting
+        self.target_category[ids] = category
+        self.sample_counts += torch.bincount(category, minlength=4)
+        self.sample_vx_hist += torch.bincount(vb[forward], minlength=7)
+        self.sample_height_hist += torch.bincount(hb[height], minlength=5)
+        self._elapsed[ids] = 0
+        low, high = self.dwell_s
+        self._dwell[ids] = low + (high-low)*torch.rand(n, device=self.device)
+
     def _advance_gen_commands(self):
         ids = torch.where(self.gen_env_mask)[0]
         if not ids.numel():
             return
         dt = float(self._env.dt)
+        if self.vxh:
+            delta = self.target_command[ids] - self.task_command[ids]
+            self.task_command[ids] += torch.clamp(delta, -self.rates * dt, self.rates * dt)
+            self.task_command[ids, 1:3] = 0
+            reached = (self.target_command[ids] - self.task_command[ids]).abs().amax(-1) < 1e-6
+            # Dwell starts after arrival, so a slow height ramp cannot consume the hold.
+            self._dwell[ids] -= reached.float() * dt
+            due = ids[(self._dwell[ids] <= 0) & ~self.external_command_mask[ids]]
+            self._sample_gen_targets(due)
+            return
         self._elapsed[ids] += dt
         self._dwell[ids] -= dt
         random_ids = ids[~self.external_command_mask[ids]]

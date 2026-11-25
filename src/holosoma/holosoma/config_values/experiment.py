@@ -19,6 +19,7 @@ from holosoma.config_values.wbt.g1.loaded_4d import (
     g1_loaded_4d_stage1_locomotion,
     g1_loaded_4d_stage1_squat,
     g1_loaded_4d_stage2,
+    g1_loaded_4d_stage2_vxh,
 )
 
 DEFAULTS = {
@@ -26,6 +27,7 @@ DEFAULTS = {
     "g1_loaded_4d_stage1_locomotion": g1_loaded_4d_stage1_locomotion,
     "g1_loaded_4d_stage1_squat": g1_loaded_4d_stage1_squat,
     "g1_loaded_4d_stage2": g1_loaded_4d_stage2,
+    "g1_loaded_4d_stage2_vxh": g1_loaded_4d_stage2_vxh,
     "g1_29dof": g1_29dof,
     "g1_29dof_fast_sac": g1_29dof_fast_sac,
     "t1_29dof": t1_29dof,

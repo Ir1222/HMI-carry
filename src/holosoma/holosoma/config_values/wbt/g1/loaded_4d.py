@@ -122,3 +122,42 @@ g1_loaded_4d_stage1 = loaded_4d_preset()
 g1_loaded_4d_stage1_locomotion = loaded_4d_preset(data="locomotion")
 g1_loaded_4d_stage1_squat = loaded_4d_preset(data="squat")
 g1_loaded_4d_stage2 = loaded_4d_preset(stage=2)
+
+
+def loaded_4d_vxh_preset():
+    """Independent Stage2 experiment: Track remains reference-derived in all axes."""
+    base = loaded_4d_preset(stage=2)
+    term = base.command.setup_terms['motion_command']
+    options = {**term.params['loaded_4d'],
+        'profile': 'vxh', 'diagnostics': True,
+        'ranges': [[0., .8], [0., 0.], [0., 0.], [.60, .80]],
+        'external_ranges': [[0., .8], [0., 0.], [0., 0.], [.60, .80]],
+        'forward_range': [.1, .8], 'category_probabilities': [.5, .4, .1, 0.],
+        'combined_targets': [], 'slew_rates': [.3, .3, .6, .06],
+        # Frozen from docs/loaded_4d_vxh/calibration_summary.json before Stage2 training.
+        'constraints': {'support_vx_max': 0.03,
+         'support_grace_s': 0.5,
+         'support_ramp_s': 0.5,
+         'foot_force_min': 20.0,
+         'foot_height_max': 0.025,
+         'foot_slip_max': 0.15,
+         'hand_local_min': [[0.2, -0.02, 0.06], [-0.25, -0.21, 0.01]],
+         'hand_local_max': [[0.25, 0.13, 0.13], [-0.12, -0.09, 0.09]],
+         'hand_margin': 0.05,
+         'hand_speed_max': 0.35,
+         'box_tilt_max': 0.32},
+    }
+    rewards = {k: v for k,v in base.reward.terms.items() if not k.startswith('command_')}
+    for component, sigma, weight in [('vx', .10, 2.), ('height', .05, 1.), ('vy', .10, .3), ('yaw_rate', .30, .3)]:
+        rewards['command_'+component] = RewardTermCfg(
+            func=f'{TASK_MODULE}:command_tracking_reward', weight=weight,
+            params={'component': component, 'sigma': sigma})
+    for component, weight in [('support', -.5), ('carry', -.5)]:
+        rewards['gen_'+component] = RewardTermCfg(func=f'{TASK_MODULE}:gen_constraint_penalty',
+                                                weight=weight, params={'component': component})
+    return replace(base, training=replace(base.training, name='g1_loaded_4d_stage2_vxh'),
+                   command=replace(base.command, setup_terms={'motion_command': replace(term, params={**term.params, 'loaded_4d': options})}),
+                   reward=replace(base.reward, terms=rewards))
+
+
+g1_loaded_4d_stage2_vxh = loaded_4d_vxh_preset()

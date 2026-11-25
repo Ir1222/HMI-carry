@@ -1,0 +1,26 @@
+[
+  {
+    "segment": "smoke_initial",
+    "iteration": 6002,
+    "optimizer_steps": [
+      60.0
+    ],
+    "std_mean": 0.03953773155808449,
+    "normalizer_counts": [
+      1179849216.0,
+      1179849216.0
+    ]
+  },
+  {
+    "segment": "smoke_resume",
+    "iteration": 6003,
+    "optimizer_steps": [
+      100.0
+    ],
+    "std_mean": 0.03955097496509552,
+    "normalizer_counts": [
+      1179852288.0,
+      1179852288.0
+    ]
+  }
+]

@@ -1,0 +1,2 @@
+{"event":"initialize","baseline_commit":"e0c68a8","budget_updates":15000,"stage1_iteration":6000,"cpu_tests_passed":50,"decision":"keep implementation; await physical calibration before training"}
+{"event":"smoke","completed_updates":5,"envs":64,"optimizer_steps":[60,100],"finite_scalars":935,"decision":"keep; continue restored optimizer to cumulative 1000 at 8192 envs"}

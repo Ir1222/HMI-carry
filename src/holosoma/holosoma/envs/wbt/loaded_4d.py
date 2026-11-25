@@ -12,7 +12,7 @@ from holosoma.envs.wbt.hybrid_size_randomization import (
     rotated_scaled_lower_bound_z,
 )
 from holosoma.envs.wbt.wbt_manager import WholeBodyTrackingManager
-from holosoma.utils.rotations import quat_apply
+from holosoma.utils.rotations import quat_apply, quat_conjugate
 
 
 def command(env):
@@ -56,6 +56,76 @@ def physical_metrics(env):
     }
 
 
+def carry_support_metrics(env):
+    """Actual ankle contact and box-local wrist geometry; no hand contact claim.
+
+    Contact forces are reordered by IsaacSim into simulator._body_list order.
+    The collisionless *_foot_contact_point bodies MUST NOT supply the forces.
+    Four sole probes approximate the ankle cylinders' bottom (URDF z=-.035).
+    Requiring the highest probe near ground rejects toe-only contact.
+    """
+    cmd, sim = command(env), env.simulator
+    feet, hands = env._loaded_feet, env._loaded_hands
+    pos, rot = sim._rigid_body_pos[:, feet], sim._rigid_body_rot[:, feet]
+    offsets = quat_apply(rot[:, :, None, :].expand(-1, -1, 4, -1),
+                         env._loaded_sole_points.expand(env.num_envs, 2, -1, -1), w_last=True)
+    heights = (pos[:, :, None, 2] + offsets[..., 2] - sim.scene.env_origins[:, None, None, 2])
+    velocities = sim._rigid_body_vel[:, feet, None, :] + torch.linalg.cross(
+        sim._rigid_body_ang_vel[:, feet, None, :].expand_as(offsets), offsets, dim=-1)
+    # The audited box local z points down in the references; measure axis tilt,
+    # not its directed angle to world up (which would report normal carry as pi).
+    box_q = cmd.simulator_object_quat_w
+    inv = quat_conjugate(box_q, w_last=True)
+    rel = sim._rigid_body_pos[:, hands] - cmd.simulator_object_pos_w[:, None, :]
+    local = quat_apply(inv[:, None, :].expand(-1, 2, -1), rel, w_last=True)
+    relative_velocity = sim._rigid_body_vel[:, hands] - cmd.simulator_object_lin_vel_w[:, None, :]
+    relative_velocity -= torch.linalg.cross(cmd.simulator_object_ang_vel_w[:, None, :].expand_as(rel), rel, dim=-1)
+    up = torch.zeros_like(cmd.simulator_object_pos_w)
+    up[:, 2] = 1
+    forward = torch.zeros_like(up)
+    forward[:, 0] = 1
+    heading = quat_apply(sim.robot_root_states[:, 3:7], forward, w_last=True)[:, :2]
+    heading = heading / heading.norm(dim=-1, keepdim=True).clamp_min(1e-8)
+    return {
+        "root_heading": heading,
+        "foot_force_z": sim.contact_forces[:, feet, 2].clamp_min(0),
+        "foot_height": heights.amax(-1),
+        "foot_min_height": heights.amin(-1),
+        "foot_slip": velocities[..., :2].norm(dim=-1).amax(-1),
+        "hand_box_local": local,
+        "hand_box_speed": relative_velocity.norm(dim=-1),
+        "box_tilt": torch.acos(quat_apply(box_q, up, w_last=True)[:, 2].abs().clamp(0, 1)),
+        "root_position": sim.robot_root_states[:, :3],
+        "box_quaternion": box_q,
+    }
+
+
+def gen_constraint_penalty(env, component):
+    """Dimensionless soft costs; RewardManager alone applies weight and dt."""
+    cmd = command(env)
+    cfg = cmd.options['constraints']
+    m = carry_support_metrics(env)
+    if component == 'support':
+        force = (m['foot_force_z'] / cfg['foot_force_min']).clamp(0, 1)
+        height = torch.exp(-(m['foot_height'].clamp_min(0) / cfg['foot_height_max']).square())
+        slip = torch.exp(-(m['foot_slip'] / cfg['foot_slip_max']).square())
+        quality = torch.minimum(torch.minimum(force, height), slip).amin(-1)
+        gate = ((cmd._stationary_time - cfg['support_grace_s']) / cfg['support_ramp_s']).clamp(0, 1)
+        cost = gate * (1 - quality)
+    elif component == 'carry':
+        low = torch.as_tensor(cfg['hand_local_min'], device=env.device)
+        high = torch.as_tensor(cfg['hand_local_max'], device=env.device)
+        distance = ((low - m['hand_box_local']).clamp_min(0) +
+                    (m['hand_box_local'] - high).clamp_min(0)).norm(dim=-1).amax(-1)
+        slip = (m['hand_box_speed'].amax(-1) - cfg['hand_speed_max']).clamp_min(0)
+        tilt = (m['box_tilt'] - cfg['box_tilt_max']).clamp_min(0)
+        cost = (distance / cfg['hand_margin']).square() + (slip / cfg['hand_speed_max']).square() + (tilt / .3).square()
+        cost = cost.clamp_max(4)
+    else:
+        raise ValueError(component)
+    return torch.where(cmd.gen_env_mask & ~physical_failure(env), cost, torch.zeros_like(cost))
+
+
 def physical_failure(env):
     metrics = physical_metrics(env)
     cfg = command(env).options
@@ -78,14 +148,14 @@ def clip_finished(env):
 
 def command_tracking_reward(env, component: str, sigma: float):
     """Gen reward evaluates the command acted upon, before the next publication."""
-    if sigma <= 0 or component not in {"velocity", "yaw_rate", "height"}:
+    if sigma <= 0 or component not in {"velocity", "vx", "vy", "yaw_rate", "height"}:
         raise ValueError("Invalid Loaded-4D command reward configuration")
     cmd = command(env)
     error = cmd.measured_state() - cmd.applied_command
     if component == "velocity":
         error_sq = error[:, :2].square().sum(dim=-1)
     else:
-        error_sq = error[:, 2 if component == "yaw_rate" else 3].square()
+        error_sq = error[:, {"vx": 0, "vy": 1, "yaw_rate": 2, "height": 3}[component]].square()
     valid = cmd.gen_env_mask & ~physical_failure(env)
     return torch.where(valid, torch.exp(-error_sq / sigma**2), torch.zeros_like(error_sq))
 
@@ -107,6 +177,13 @@ class Loaded4DTrackingManager(WholeBodyTrackingManager):
             raise ValueError("Loaded-4D requires the original free dynamic object URDF")
         bounds = torch.tensor(load_urdf_collision_bounds(path), device=self.device, dtype=torch.float32)
         self._loaded_collision_corners = collision_bounds_corners(bounds)
+        if command(self).options.get('diagnostics', False):
+            names = self.simulator._body_list
+            self._loaded_feet = [names.index(side + '_ankle_roll_link') for side in ('left', 'right')]
+            self._loaded_hands = [names.index(side + '_wrist_yaw_link') for side in ('left', 'right')]
+            self._loaded_sole_points = torch.tensor(
+                [[-.04, -.026, -.035], [-.04, .026, -.035], [.12, -.026, -.035], [.12, .026, -.035]],
+                device=self.device).reshape(1, 1, 4, 3)
 
     def reset_all(self):
         # Deliberately bypass WBT.reset_all -> BaseTask.reset_all's zero-action step.
@@ -155,10 +232,20 @@ class Loaded4DTrackingManager(WholeBodyTrackingManager):
                 "body_position_error": (cmd.body_pos_relative_w - cmd.robot_body_pos_w).norm(dim=-1).mean(dim=-1),
                 "object_position_error": (cmd.object_pos_w - cmd.simulator_object_pos_w).norm(dim=-1),
                 **{key: value.clone() for key, value in physical_metrics(self).items()},
+                **({key: value.clone() for key, value in carry_support_metrics(self).items()}
+                   if cmd.options.get('diagnostics', False) else {}),
             }
 
     def _compute_reward(self):
+        detailed = command(self).options.get('profile') == 'vxh'
+        if detailed:
+            before = {k: v.clone() for k, v in self.reward_manager._episode_sums.items()}
         super()._compute_reward()
+        if detailed:
+            mask = command(self).gen_env_mask
+            if mask.any():
+                for key, value in self.reward_manager._episode_sums.items():
+                    self.log_dict[f'loaded_4d/gen_reward_rate/{key}'] = ((value - before[key])[mask].mean() / self.dt).detach()
         bad = ~torch.isfinite(self.rew_buf)
         if (bad & ~self.reset_buf.bool()).any():
             raise RuntimeError("Non-finite Loaded-4D reward without a physical termination")
@@ -177,6 +264,12 @@ class Loaded4DTrackingManager(WholeBodyTrackingManager):
     def _update_log_dict(self):
         super()._update_log_dict()
         cmd = command(self)
+        if cmd.options.get('profile') == 'vxh':
+            for labels, counts in ((('forward','height','stand','combined'), cmd.sample_counts),
+                                   (tuple(f'vx_bin_{i}' for i in range(7)), cmd.sample_vx_hist),
+                                   (tuple(f'height_bin_{i}' for i in range(5)), cmd.sample_height_hist)):
+                for label, count in zip(labels, counts):
+                    self.log_dict[f'loaded_4d/sampled/{label}'] = (count / counts.sum().clamp_min(1)).detach()
         errors = (cmd.measured_state() - cmd.applied_command).abs()
         for name, mask in (("track", cmd.track_env_mask), ("gen", cmd.gen_env_mask)):
             if mask.any():
