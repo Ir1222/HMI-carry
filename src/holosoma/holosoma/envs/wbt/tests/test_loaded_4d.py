@@ -633,3 +633,122 @@ def test_stage1_starts_fresh_without_checkpoint_or_optimizer_state(make_command,
         if algo is not None:
             algo.writer.close()
         torch.set_num_threads(old_threads)
+
+
+@pytest.fixture
+def manual_viewer(make_command):
+    from holosoma.agents.callbacks.viser_callback import EvalViserCallback
+    from holosoma.agents.callbacks.tests.test_viser_callback import _FakeRenderServer
+    from holosoma.config_types.eval_callback import ViserConfig
+
+    cmd, env, _ = make_command(stage=2)
+    callback = EvalViserCallback(ViserConfig(loaded_4d_controls=True),
+        SimpleNamespace(env=env, _unwrap_env=lambda: env, device='cpu', log_dir='/tmp'))
+    callback._motion_command = cmd
+    track_id = int(torch.where(cmd.track_env_mask)[0][0])
+    gen_id = int(torch.where(cmd.gen_env_mask)[0][0])
+    callback._env_ids = [track_id, gen_id]
+    server = _FakeRenderServer()
+    callback._viser = SimpleNamespace(server=server)
+    callback._setup_loaded_4d_controls()
+    return callback, server.gui, cmd, env, gen_id
+
+
+def test_viewer_speed_presets_queue_then_apply_only_visible_gen_without_reset(manual_viewer):
+    import threading
+
+    callback, gui, cmd, env, eid = manual_viewer
+    before_target = cmd.target_command.clone()
+    before_root = env.simulator.all_root_states.clone()
+    before_frame = cmd.time_steps.clone()
+    before_resets = cmd.physical_reset_count.clone()
+    other = torch.arange(env.num_envs) != eid
+    for speed in (.1, .4, .8):
+        dropdown = gui.dropdowns['Command preset']
+        dropdown.value = f'Forward {speed} m/s'
+        assert dropdown.value in dropdown.options
+        dropdown.callback(None)
+        previous = cmd.target_command.clone()
+        # Exercise the browser callback from a different thread. No sim writes there.
+        worker = threading.Thread(target=gui.buttons['Apply & hold command'].callback, args=(None,))
+        worker.start()
+        worker.join(timeout=2)
+        assert not worker.is_alive()
+        assert torch.equal(cmd.target_command, previous)
+        callback.on_pre_eval_env_step({})
+        assert cmd.target_command[eid, 0].item() == pytest.approx(speed)
+        assert cmd.external_command_mask[eid]
+        assert torch.equal(cmd.target_command[other], before_target[other])
+        assert torch.equal(env.simulator.all_root_states, before_root)
+        assert torch.equal(cmd.time_steps, before_frame)
+        assert torch.equal(cmd.physical_reset_count, before_resets)
+
+
+def test_viewer_hold_survives_reset_and_random_button_releases_once(manual_viewer):
+    callback, gui, cmd, env, eid = manual_viewer
+    gui.sliders['vx (m/s)'].value = .4
+    gui.buttons['Apply & hold command'].callback(None)
+    callback.on_pre_eval_env_step({})
+    cmd.reset(torch.tensor([eid]))
+    assert not cmd.external_command_mask[eid]
+    resets = cmd.physical_reset_count.clone()
+    root = env.simulator.all_root_states.clone()
+    callback.on_pre_eval_env_step({})
+    assert cmd.target_command[eid, 0].item() == pytest.approx(.4)
+    assert cmd.external_command_mask[eid]
+    assert torch.equal(cmd.physical_reset_count, resets)
+    assert torch.equal(env.simulator.all_root_states, root)
+    gui.buttons['Resume random commands'].callback(None)
+    assert cmd.external_command_mask[eid]  # release also runs only in the eval thread
+    callback.on_pre_eval_env_step({})
+    assert not cmd.external_command_mask[eid]
+    target = cmd.target_command.clone()
+    callback.on_pre_eval_env_step({})
+    assert torch.equal(cmd.target_command, target)
+
+
+def test_viewer_command_boundaries_and_invalid_values(manual_viewer):
+    callback, gui, cmd, env, eid = manual_viewer
+    for height in (.60, .78):
+        gui.sliders['pelvis height (m)'].value = height
+        gui.buttons['Apply & hold command'].callback(None)
+        callback.on_pre_eval_env_step({})
+        assert cmd.target_command[eid, 3].item() == pytest.approx(height)
+    previous = cmd.target_command.clone()
+    for bad in (float('nan'), float('inf'), .81):
+        gui.sliders['vx (m/s)'].value = bad
+        gui.buttons['Apply & hold command'].callback(None)
+        callback.on_pre_eval_env_step({})
+        assert torch.equal(cmd.target_command, previous)
+        assert 'Invalid command' in gui.texts['Command control'].value
+
+
+def test_viewer_manual_controls_reject_track_and_default_remains_disabled(make_command):
+    from holosoma.agents.callbacks.viser_callback import EvalViserCallback
+    from holosoma.config_types.eval_callback import ViserConfig
+
+    cmd, env, _ = make_command(stage=1)
+    callback = EvalViserCallback(ViserConfig(), SimpleNamespace(env=env, device='cpu'))
+    callback._motion_command = cmd
+    callback._env_ids = [0]
+    callback._setup_loaded_4d_controls()
+    assert callback._loaded_command_env_ids == []
+    callback.cfg = ViserConfig(loaded_4d_controls=True)
+    with pytest.raises(ValueError, match='visible Gen envs'):
+        callback._setup_loaded_4d_controls()
+
+
+def test_viewer_readout_distinguishes_target_applied_measured_and_reset(manual_viewer):
+    callback, gui, cmd, env, eid = manual_viewer
+    cmd.target_command[eid] = torch.tensor([.8, 0., 0., .73])
+    cmd.applied_command[eid] = torch.tensor([.4, 0., 0., .73])
+    env.simulator.robot_root_states[eid, 7] = .2
+    cmd.physical_reset_count[eid] = 3
+    env.episode_length_buf[eid] = 10
+    callback._update_loaded_4d_readout()
+    text = gui.texts['Command response'].value
+    assert 'Target:   [0.800' in text
+    assert 'Applied:  [0.400' in text
+    assert 'Measured: [0.200' in text
+    assert 'Episode step: 10' in text
+    assert 'Resets (including initialization): 3' in text

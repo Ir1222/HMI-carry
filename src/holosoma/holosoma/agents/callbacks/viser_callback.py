@@ -63,6 +63,16 @@ class EvalViserCallback(RLEvalCallback):
         self._env_offsets: list[np.ndarray] = []  # world offset per env slot
         self._first_step = True
 
+        # Browser handlers queue plain values; only the eval thread touches torch/sim state.
+        self._loaded_command_lock = threading.Lock()
+        self._loaded_command_env_ids: list[int] = []
+        self._loaded_goal: tuple[float, ...] | None = None
+        self._loaded_applied_goal: tuple[float, ...] | None = None
+        self._loaded_inputs: list = []
+        self._loaded_status: Any = None
+        self._loaded_readout: Any = None
+        self._loaded_last_readout = 0.0
+
         # FPS tracking
         self._fps_widget = None
         self._last_update_time: float | None = None
@@ -94,18 +104,27 @@ class EvalViserCallback(RLEvalCallback):
         return hasattr(motion_cmd, "track_env_mask") and hasattr(motion_cmd, "gen_env_mask")
 
     @staticmethod
+    def _is_loaded_4d_command(motion_cmd: Any) -> bool:
+        return hasattr(motion_cmd, "task_command") and callable(getattr(motion_cmd, "set_command", None))
+
+    @classmethod
+    def _has_reference_for_env(cls, motion_cmd: Any, env_id: int) -> bool:
+        # A Loaded-4D Gen clip only supplies the reset pose; it is not a target trajectory.
+        return not cls._is_loaded_4d_command(motion_cmd) or bool(motion_cmd.track_env_mask[env_id])
+
+    @staticmethod
     def _motion_has_object_goal(motion_cmd: Any) -> bool:
         return bool(getattr(getattr(motion_cmd, "motion", None), "has_object", False))
 
     @classmethod
     def _should_show_torso_goal(cls, motion_cmd: Any, env_id: int) -> bool:
-        if motion_cmd is None or not cls._is_hybrid_motion_command(motion_cmd):
+        if motion_cmd is None or not cls._is_hybrid_motion_command(motion_cmd) or cls._is_loaded_4d_command(motion_cmd):
             return False
         return not cls._motion_has_object_goal(motion_cmd)
 
     @classmethod
     def _should_show_object_goal(cls, motion_cmd: Any, env_id: int) -> bool:
-        if motion_cmd is None or not cls._is_hybrid_motion_command(motion_cmd):
+        if motion_cmd is None or not cls._is_hybrid_motion_command(motion_cmd) or cls._is_loaded_4d_command(motion_cmd):
             return False
         return cls._motion_has_object_goal(motion_cmd)
 
@@ -300,10 +319,14 @@ class EvalViserCallback(RLEvalCallback):
             motion_cmd = env.command_manager.get_state("motion_command")
             if motion_cmd is not None:
                 self._motion_command = motion_cmd
+        self._setup_loaded_4d_controls()
         if self.cfg.show_reference and self._motion_command is not None:
             motion_cmd = self._motion_command
             if motion_cmd is not None:
                 for slot, eid in enumerate(self._env_ids):
+                    if not self._has_reference_for_env(motion_cmd, eid):
+                        self._ref_vizs.append(None)
+                        continue
                     ref_viz = RobotAssetViser(
                         self._viser,
                         urdf_path,
@@ -321,7 +344,10 @@ class EvalViserCallback(RLEvalCallback):
         self._target_torso_names = []
         self._target_torso_heading_names = []
         object_cfg = env.robot_config.object
-        is_hybrid_motion = self._is_hybrid_motion_command(self._motion_command)
+        is_hybrid_motion = (
+            self._is_hybrid_motion_command(self._motion_command)
+            and not self._is_loaded_4d_command(self._motion_command)
+        )
         if is_hybrid_motion:
             for slot, _eid in enumerate(self._env_ids):
                 self._target_torso_names.append(f"/env_{slot}/target_torso")
@@ -344,7 +370,7 @@ class EvalViserCallback(RLEvalCallback):
                                 object_urdf,
                                 prefix=f"/env_{slot}/object_reference",
                                 color_override=self.cfg.reference_color,
-                            )
+                            ) if self._has_reference_for_env(self._motion_command, _eid) else None
                         )
                     if is_hybrid_motion and bool(self._motion_command.motion.has_object):
                         self._object_goal_vizs.append(
@@ -382,7 +408,7 @@ class EvalViserCallback(RLEvalCallback):
                                     motion_object_spec,
                                     prefix=f"/env_{slot}/object_reference",
                                     color_override=self.cfg.reference_color,
-                                )
+                                ) if self._has_reference_for_env(self._motion_command, _eid) else None
                             )
                         if is_hybrid_motion and bool(self._motion_command.motion.has_object):
                             self._object_goal_vizs.append(
@@ -482,7 +508,7 @@ class EvalViserCallback(RLEvalCallback):
                 self._policy_vizs[slot].update(body_pos, body_quat, world_offset=offset)
 
             # --- Update reference robot (WBT) ---
-            if slot < len(self._ref_vizs) and self._motion_command is not None:
+            if slot < len(self._ref_vizs) and self._ref_vizs[slot] is not None and self._motion_command is not None:
                 try:
                     mc = self._motion_command
                     time_step = mc.time_steps[eid].item()
@@ -552,7 +578,11 @@ class EvalViserCallback(RLEvalCallback):
                     pass
 
             # --- Update reference object (WBT-with-object) ---
-            if slot < len(self._object_ref_vizs) and self._motion_command is not None:
+            if (
+                slot < len(self._object_ref_vizs)
+                and self._object_ref_vizs[slot] is not None
+                and self._motion_command is not None
+            ):
                 try:
                     mc = self._motion_command
                     object_ref_pos = _to_np(mc.object_pos_w[eid] - sim.scene.env_origins[eid])
@@ -603,8 +633,116 @@ class EvalViserCallback(RLEvalCallback):
                 logger.warning("EvalViserCallback: failed to set the default camera pose", exc_info=True)
 
         self._capture_recording_frame()
+        self._update_loaded_4d_readout()
 
         return actor_state
+
+    # ------------------------------------------------------------------
+    # Loaded-4D external commands (Gen only)
+    # ------------------------------------------------------------------
+
+    def _setup_loaded_4d_controls(self) -> None:
+        if not self.cfg.loaded_4d_controls:
+            return
+        cmd = self._motion_command
+        if not self._is_loaded_4d_command(cmd):
+            raise ValueError("loaded_4d_controls requires a Loaded-4D checkpoint")
+        self._loaded_command_env_ids = [eid for eid in self._env_ids if bool(cmd.gen_env_mask[eid])]
+        if not self._loaded_command_env_ids:
+            raise ValueError("loaded_4d_controls requires visible Gen envs; set hybrid.track-ratio=0.0")
+
+        gui = self._viser.server.gui
+        bounds = cmd._external_ranges.detach().cpu().numpy().copy()
+        height = float(cmd.stand_height)
+        initial = (0.0, 0.0, 0.0, height)
+        presets = {
+            "Stand / rise": initial,
+            "Forward 0.1 m/s": (0.1, 0.0, 0.0, height),
+            "Forward 0.4 m/s": (0.4, 0.0, 0.0, height),
+            "Forward 0.8 m/s": (0.8, 0.0, 0.0, height),
+            "Backward -0.1 m/s": (-0.1, 0.0, 0.0, height),
+            "Left 0.1 m/s": (0.0, 0.1, 0.0, height),
+            "Right -0.1 m/s": (0.0, -0.1, 0.0, height),
+            "Turn left 0.2 rad/s": (0.0, 0.0, 0.2, height),
+            "Turn right -0.2 rad/s": (0.0, 0.0, -0.2, height),
+            "Squat 0.66 m": (0.0, 0.0, 0.0, 0.66),
+        }
+        presets = {name: goal for name, goal in presets.items()
+                   if np.all(np.asarray(goal, dtype=bounds.dtype) >= bounds[:, 0])
+                   and np.all(np.asarray(goal, dtype=bounds.dtype) <= bounds[:, 1])}
+        if "Stand / rise" not in presets:
+            raise ValueError("Loaded-4D standing command is outside the external command envelope")
+        dropdown = gui.add_dropdown("Command preset", options=tuple(presets), initial_value="Stand / rise")
+        labels = ("vx (m/s)", "vy (m/s)", "yaw rate (rad/s)", "pelvis height (m)")
+        self._loaded_inputs = [
+            gui.add_slider(label, min=round(float(bounds[i, 0]), 6), max=round(float(bounds[i, 1]), 6), step=0.01,
+                           initial_value=initial[i])
+            for i, label in enumerate(labels)
+        ]
+        apply_button = gui.add_button("Apply & hold command", hint="Apply all four values without a physical reset.")
+        random_button = gui.add_button("Resume random commands")
+        self._loaded_status = gui.add_text("Command control", "Holding standing command", disabled=True)
+        self._loaded_readout = gui.add_text("Command response", "", multiline=True, disabled=True)
+        with self._loaded_command_lock:
+            self._loaded_goal = initial
+        self._loaded_applied_goal = None
+
+        @dropdown.on_update
+        def _select_preset(_event) -> None:
+            # Selection edits the fields. Apply is explicit, including for repeated presets.
+            for widget, value in zip(self._loaded_inputs, presets[dropdown.value]):
+                widget.value = value
+
+        @apply_button.on_click
+        def _apply_command(_event) -> None:
+            values = tuple(float(widget.value) for widget in self._loaded_inputs)
+            array = np.asarray(values, dtype=bounds.dtype)
+            if not np.isfinite(array).all() or (array < bounds[:, 0]).any() or (array > bounds[:, 1]).any():
+                self._loaded_status.value = "Invalid command: check the four values and slider limits"
+                return
+            with self._loaded_command_lock:
+                self._loaded_goal = values
+            self._loaded_status.value = f"Holding {values}"
+
+        @random_button.on_click
+        def _resume_random(_event) -> None:
+            with self._loaded_command_lock:
+                self._loaded_goal = None
+            self._loaded_status.value = "Random commands"
+
+    def on_pre_eval_env_step(self, actor_state: dict) -> dict:
+        if not self._loaded_command_env_ids:
+            return actor_state
+        cmd = self._motion_command
+        with self._loaded_command_lock:
+            goal = self._loaded_goal
+        if goal is None:
+            if self._loaded_applied_goal is not None:
+                cmd.release_external_command(env_ids=self._loaded_command_env_ids)
+        elif goal != self._loaded_applied_goal or not bool(cmd.external_command_mask[self._loaded_command_env_ids].all()):
+            # Reapply the held goal after ordinary fall/timeout resets, without causing a reset.
+            cmd.set_command(goal, env_ids=self._loaded_command_env_ids)
+        self._loaded_applied_goal = goal
+        return actor_state
+
+    def _update_loaded_4d_readout(self) -> None:
+        if self._loaded_readout is None or time.perf_counter() - self._loaded_last_readout < 0.1:
+            return
+        self._loaded_last_readout = time.perf_counter()
+        cmd = self._motion_command
+        eid = self._loaded_command_env_ids[0]
+
+        def values(tensor) -> str:
+            return ", ".join(f"{value:.3f}" for value in tensor[eid].detach().cpu().tolist())
+
+        self._loaded_readout.value = (
+            f"Env {eid} | [vx, vy, yaw rate, pelvis height]\n"
+            f"Target:   [{values(cmd.target_command)}]\n"
+            f"Applied:  [{values(cmd.applied_command)}]\n"
+            f"Measured: [{values(cmd.measured_state())}]\n"
+            f"Episode step: {int(self._get_env().episode_length_buf[eid])} | "
+            f"Resets (including initialization): {int(cmd.physical_reset_count[eid])}"
+        )
 
     # ------------------------------------------------------------------
     # Default camera
@@ -987,4 +1125,11 @@ class EvalViserCallback(RLEvalCallback):
         self._recording_stop_button = None
         self._recording_status_widget = None
         self._fixed_scene_state_warning_emitted = False
+        self._loaded_command_env_ids = []
+        self._loaded_inputs = []
+        self._loaded_status = None
+        self._loaded_readout = None
+        with self._loaded_command_lock:
+            self._loaded_goal = None
+        self._loaded_applied_goal = None
         logger.info("EvalViserCallback: stopped viser server")

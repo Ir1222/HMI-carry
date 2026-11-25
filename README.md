@@ -283,7 +283,73 @@ python scripts_run/evaluate_loaded_4d.py \
 observation noise 配置和冻结的 normalizers。当前脚本在关闭 Isaac 之前打印原始异常；
 多 trial 使用 `torch.no_grad()`，避免跨 trial reset 的 inference tensor 修改错误。
 
-### Stage 2：连续 command 评估
+### Stage 2：在 Viser 网页中固定或切换四维 command
+
+使用训练好的 Stage 2 policy，将评估环境设为 **Gen**，并启用
+`--viser.config.loaded-4d-controls`。网页可以选择预设或手动调整
+`[vx, vy, yaw_rate, pelvis_height]`，无需重新训练。
+
+下面使用当前 Stage 2 的 `model_20999.pt`，从行走 reference 的 frame 0 初始化持箱状态。
+`MOTION_ID` 在这里只决定初始状态，后续动作由四维 command 和 policy 决定；任意新 command
+没有对应的逐帧 reference，Gen viewer 会隐藏蓝色 reference 和旧 object endpoint goal。
+
+```bash
+cd /home/han/pyx/HMI_clean
+source /home/han/pyx/HMI_clean_runtime/activate.sh
+
+RUN_DIR=/home/han/pyx/HMI_clean_runs/loaded_4d/stage2/WholeBodyTracking/20261124_165511-g1_loaded_4d_stage2_joint-locomotion
+CHECKPOINT="$RUN_DIR/model_20999.pt"
+MOTION_ID=1
+
+python src/holosoma/holosoma/eval_agent.py \
+  --checkpoint="$CHECKPOINT" \
+  --viser.config.enabled \
+  --viser.config.loaded-4d-controls \
+  --viser.config.no-show-reference \
+  --viser.config.port=8012 \
+  --viser.config.num-envs=1 \
+  --training.num-envs=1 \
+  --training.headless=True \
+  --training.max-eval-steps=30000 \
+  --training.export-onnx=False \
+  --simulator.config.sim.max-episode-length-s=600.0 \
+  --logger.base-dir=/home/han/pyx/HMI_clean_runs/loaded_4d/eval_viewer \
+  --command.setup-terms.motion-command.params.motion-config.hybrid.track-ratio=0.0 \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.enabled=True \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.motion-id="$MOTION_ID" \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.bin-id=None \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.local-frame=0 \
+  --command.setup-terms.motion-command.params.motion-config.eval-fixed-reset.randomize-within-bin=False
+```
+
+打开 **http://localhost:8012**。启动时保持站立目标 `[0, 0, 0, 0.73]`：
+
+1. 在 **Command preset** 选择动作，或直接调整四个滑块/数值。
+2. 点击 **Apply & hold command**，开始执行并保持这组目标；只选预设或编辑数值时不会发送。
+3. 想切换时再次编辑并点击同一按钮。切换本身不重置机器人或箱体，沿用现有 command 限速。
+4. **Resume random commands** 恢复训练配置的随机采样。
+
+| 预设 | `[vx, vy, yaw_rate, pelvis_height]` |
+|---|---|
+| Stand / rise | `[0, 0, 0, 0.73]` |
+| Forward 0.1 / 0.4 / 0.8 m/s | `[0.1 / 0.4 / 0.8, 0, 0, 0.73]`，下拉框中为三个独立选项 |
+| Backward | `[-0.1, 0, 0, 0.73]` |
+| Left / Right | `[0, ±0.1, 0, 0.73]` |
+| Turn left / right | `[0, 0, ±0.2, 0.73]` |
+| Squat | `[0, 0, 0, 0.66]` |
+
+**Command response** 显示目标值 `Target`、该控制步实际使用的指令 `Applied`、实际测量值
+`Measured`，以及 episode 步数和 reset 次数。目标变化时 `Applied` 会逐步接近 `Target`。
+跌倒等失败仍会触发原有 reset；手动目标在 reset 后继续保持，reset 计数可以识别这些重新开始。
+此命令将 episode 上限设为 600 s；不会因 command 更新或 reference clip 结束而 reset。
+
+当前外部输入范围为 `vx±0.8`、`vy±0.4`、`yaw_rate±1.0`、height `0.60–0.78`。
+但这个 Stage 2 run 的 Gen 训练是 `axes=single`，采样范围为 `vx±0.15`、`vy±0.10`、
+`yaw_rate±0.20`、height `0.66–0.73`。因此用户指定的 `0.4/0.8 m/s` 是训练采样范围外测试，
+手动组合多个轴也需实际检验；接口接受某个值不表示 policy 已可靠掌握。
+上述滑块仅控制当前可视化的 Gen envs，默认关闭；原 Stage 1 Track viewer 操作保持不变。
+
+### Stage 2：连续 command 量化评估
 
 60 s 连续 Gen 指令评估，包含站立、前后/侧向、转弯、蹲起及组合：
 

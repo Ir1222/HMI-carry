@@ -464,6 +464,7 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 | I003：修复原版与Loaded-4D共用Viser入口 | 2026-11-25 | 用户反馈网页无法打开，并确认原版复现评估也曾遇到相同错误。定位Isaac Sim的pip_prebundle内websockets12.0遮蔽runtime已安装15.0.1；在`eval_agent.run_eval_with_tyro`启用Viser时，于simulation setup之前导入Viser，依赖缺失提前报错；补3项启动回归和README逐motion查看命令 | CPU子进程复现原`No module named websockets.asyncio`；提前导入后通过；3项新测试＋15项原Viser测试共18项通过；注入真实Isaac bundle路径后，临时回环Viser服务HTTP200及带版本subprotocol的WebSocket收包通过；未启动Isaac/GPU仿真，未修改依赖、训练代码、reference或checkpoint。完整Isaac viewer仍待用户重试 |
 | I004：修复量化评估跨trial重置及异常可见性 | 2026-11-25 | 用户运行`evaluate_loaded_4d.py --mode track --trials 10`，加载成功后仅见shutdown日志且无结果JSON。CPU复现脚本中的确定缺陷：rollout的`torch.inference_mode()`使真实TerminationManager持有inference tensor，下一trial在context外reset原地修改报错；改用上游eval同样的`torch.no_grad()`。增加逐trial进度、结果输出，并在Isaac cleanup前打印flush原始traceback；同步README | 新增Track/Gen连续trial测试先在旧代码上均复现第二trial reset的RuntimeError，修复后连同异常输出顺序测试及原Loaded测试共23项通过。未修改训练/manager实现/物理/数据/模型；未运行GPU评估。本次用户日志未包含原始traceback，因此不声称已排除其他运行时问题，真实30trial结果待重新执行 |
 | D003：保存用户确认可用的三reference查看流程 | 2026-11-25 | 用户确认先设置`MOTION_ID=0/1/2`再执行完整Viser命令，可分别查看同一个joint policy的三条reference表现；README写入当前run/checkpoint、环境激活、完整变量化viewer命令、ID表和切换步骤，并为主要训练/量化评估命令补齐每次新终端的环境准备；更新验证状态 | README shell代码块语法核验，真实checkpoint配置上的三个motion ID命令仅解析验证；两个计划副本同步。仅文档修改，不启动训练或仿真。实际viewer可用来自用户确认，不扩展为量化成功率或全部控制能力已验收 |
+| I005：Stage2网页手动command与速度预设 | 2026-11-25 | 用户要求在同一viewer内固定/切换四维goal，并指定前进预设0.1/0.4/0.8m/s。仅扩展`config_types/eval_callback.py:ViserConfig`和`agents/callbacks/viser_callback.py:EvalViserCallback`：显式启用Gen控件、四滑块/预设、Apply并保持、恢复随机采样、目标/实际输入/测量值及reset读数；网页线程只排队普通数值，由评估线程调用已有`set_command/release_external_command`。Gen隐藏冻结reference，Loaded-4D隐藏旧endpoint标记；原Track及上游HMI默认行为保留 | 新增6项CPU回归，本次相关47项测试通过；验证线程隔离、只控制可见Gen、不因切换reset、正常reset后持令恢复、0.6/0.78浮点边界和读数。真实Viser控件构建/HTTP200通过；README 19个bash块语法及真实Stage2 checkpoint的Gen CLI解析通过。未启动Isaac/GPU，实际0.4/0.8m/s跟踪能力未验证；该run Gen训练vx范围±0.15、axes=single，高速和组合明确列为范围外测试 |
 
 ### 10.2 实施进度与可执行入口
 
@@ -474,6 +475,8 @@ Stage2加载后的必须检查：Track/Gen数量匹配新ratio；Gen raw referen
 2026-11-25追加：用户已自行启动joint Stage1，run为`/home/han/pyx/HMI_clean_runs/loaded_4d/stage1/WholeBodyTracking/20261124_105123-g1_loaded_4d_stage1_joint-locomotion`。保存配置与train.log确认加载3条motion；末尾`-locomotion`不代表单技能。已有编号checkpoint至`model_06000.pt`（本次只读快照），用户评估日志确认113D/315D模型加载成功；viewer依赖失败不构成训练失败或reference初始化错误的证据。评估配置的`motion_id=1/local_frame=0`确为行走起点。I003修复共用入口，单独补充CPU启动测试；Stage1物理效果仍须实际viewer及量化评估确认。
 
 随后用户明确确认：I003修复后的完整Viser命令可用，分别设置`MOTION_ID=0`、`1`、`2`可查看三条reference下的policy。D003据此保存可复用操作流程；该确认解决浏览器查看可用性问题，未提供定量误差、完整episode成功率或Stage2泛化结果，不将其写为全部训练目标已完成。
+
+Stage2追加：用户已有run `/home/han/pyx/HMI_clean_runs/loaded_4d/stage2/WholeBodyTracking/20261124_165511-g1_loaded_4d_stage2_joint-locomotion` 的 `model_20999.pt`。本地保存配置确认三reference、训练Track/Gen=0.5、Gen `axes=single`。I005新增的viewer入口以`track-ratio=0.0`、`--viser.config.loaded-4d-controls`运行同一个policy，默认持站立目标；选择预设后点击Apply执行。Gen中motion ID只控制reset初态；新目标不生成reference动画。600s episode上限仅为查看时CLI override，失败termination保留，UI显示reset次数，避免将多个重置片段视作持续成功。
 
 - Runtime默认：200Hz physics / decimation4 / 50Hz policy，原固定中心action；Stage1全Track，Stage2固定50/50；同一113D/315D observation schema。
 - Gen随机目标用0.8s smoothstep、height限速0.06m/s；外部每帧重定向使用连续限速，避免重启smoothstep造成停滞。外部目标与本步applied command分开保存。

@@ -38,11 +38,17 @@ class _FakeGuiHandle:
         self.callback = callback
         return callback
 
+    def on_update(self, callback):
+        self.callback = callback
+        return callback
+
 
 class _FakeGui:
     def __init__(self):
         self.buttons = {}
         self.texts = {}
+        self.sliders = {}
+        self.dropdowns = {}
 
     def add_button(self, label, **kwargs):
         handle = _FakeGuiHandle(disabled=kwargs.get("disabled", False))
@@ -52,6 +58,17 @@ class _FakeGui:
     def add_text(self, label, initial_value, **_kwargs):
         handle = _FakeGuiHandle(value=initial_value)
         self.texts[label] = handle
+        return handle
+
+    def add_slider(self, label, *, initial_value, **_kwargs):
+        handle = _FakeGuiHandle(value=initial_value)
+        self.sliders[label] = handle
+        return handle
+
+    def add_dropdown(self, label, *, options, initial_value, **_kwargs):
+        handle = _FakeGuiHandle(value=initial_value)
+        handle.options = options
+        self.dropdowns[label] = handle
         return handle
 
 
@@ -252,6 +269,23 @@ def test_hybrid_robot_only_visibility_keeps_torso_goal_enabled():
     assert EvalViserCallback._should_show_torso_goal(motion_cmd, 1)
     assert not EvalViserCallback._should_show_object_goal(motion_cmd, 0)
     assert not EvalViserCallback._should_show_object_goal(motion_cmd, 1)
+
+
+def test_loaded_4d_hides_endpoint_goals_and_only_gen_references():
+    motion_cmd = SimpleNamespace(
+        motion=SimpleNamespace(has_object=True), task_command=torch.zeros(2, 4),
+        set_command=lambda *args: None,
+        track_env_mask=torch.tensor([True, False]), gen_env_mask=torch.tensor([False, True]),
+    )
+    assert EvalViserCallback._has_reference_for_env(motion_cmd, 0)
+    assert not EvalViserCallback._has_reference_for_env(motion_cmd, 1)
+    for eid in (0, 1):
+        assert not EvalViserCallback._should_show_object_goal(motion_cmd, eid)
+        assert not EvalViserCallback._should_show_torso_goal(motion_cmd, eid)
+    # Original HMI still has reference targets in both groups.
+    del motion_cmd.task_command
+    assert EvalViserCallback._has_reference_for_env(motion_cmd, 1)
+    assert EvalViserCallback._should_show_object_goal(motion_cmd, 1)
 
 
 def test_load_fixed_scene_box_specs_reads_box_metadata(tmp_path):

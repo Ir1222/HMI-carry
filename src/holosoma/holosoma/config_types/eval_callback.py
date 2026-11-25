@@ -114,6 +114,9 @@ class ViserConfig:
     show_reference: bool = True
     """Show reference motion (WBT only, uses a second robot with color override)."""
 
+    loaded_4d_controls: bool = False
+    """Enable manual 4D command controls for visible Loaded-4D Gen environments."""
+
     reference_color: tuple[float, float, float] = (0.3, 0.6, 1.0)
     """RGB color for reference robot mesh (0-1 range)."""
 
