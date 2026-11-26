@@ -13,6 +13,8 @@ num_envs=${5:-8192}
 case "$mode" in transfer) load_optimizer=False ;; resume) load_optimizer=True ;; *) exit 2 ;; esac
 cd /home/han/pyx/HMI_clean
 source /home/han/pyx/HMI_clean_runtime/activate.sh
+source scripts_run/loaded_4d_status.sh
+export PYTHONFAULTHANDLER=1
 base=/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh
 segment_dir="$base/$segment"
 mkdir -p "$segment_dir"
@@ -32,6 +34,9 @@ p.write_text(json.dumps({'status':'running','started_unix':time.time(),'checkpoi
  'requested_updates':n,'completed_updates':0,'first_display_iteration':x['iter'],'last_display_iteration':x['iter']+n-1,
  'note':'PPO repeats the saved display index on resume; sum completed_updates for the budget, not index differences.'},indent=2)+'\n')
 PY
+# Install after creating our ledger, so a duplicate-segment rejection cannot
+# overwrite the status of an earlier run.
+trap 'code=$?; if (( code != 0 )); then loaded_4d_record_failure "$segment_dir/segment.json" "$code" segment || true; fi' EXIT
 python src/holosoma/holosoma/train_agent.py \
   exp:g1-loaded-4d-stage2-vxh logger:disabled \
   --training.checkpoint="$checkpoint" --training.num-envs="$num_envs" \

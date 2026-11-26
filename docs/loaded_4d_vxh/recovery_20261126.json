@@ -1,0 +1,21 @@
+{
+  "detected_at": "2026-11-26T16:00:15+08:00",
+  "crash_at": "2026-11-26T01:22:32+08:00",
+  "process_pid": 1554115,
+  "exit_code": 139,
+  "evidence": "kernel: python[1554115]: segfault at 90 ... in python3.11; shell: Segmentation fault (core dumped)",
+  "completed_additional_updates_before_crash": 2500,
+  "failed_segment_added_updates": 0,
+  "last_checkpoint": "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/round_2500/WholeBodyTracking/20261125_155645-g1_loaded_4d_stage2_vxh-locomotion/model_08496.pt",
+  "checkpoint_tensors_finite": true,
+  "optimizer_step": 50000,
+  "actor_critic_lr": 2.2500000000000005e-05,
+  "std_mean": 0.12407795339822769,
+  "root_cause": "Native Python startup crash; no stack available from original process, specific dependency cause unconfirmed. Not an evaluation stop or exhausted training budget.",
+  "recovery_segment": "round_4000_retry_20261126_160321",
+  "recovery_pid": 1617053,
+  "recovery_screen": "hmi-vxh-recovery",
+  "recovery_verified": "Optimizer loaded from checkpoint; real 8192-env PPO updates observed at display8496,8497,8498; no optimizer reset.",
+  "fix": "Exit traps mark failed status, PYTHONFAULTHANDLER=1, matched completed evaluations reused, failed run preserved, unique retry segment, single-driver lock.",
+  "tests": "5 runner tests passed; bash syntax/diff check passed; actual resumed updates verified."
+}

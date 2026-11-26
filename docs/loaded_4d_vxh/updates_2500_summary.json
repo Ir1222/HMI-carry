@@ -1,0 +1,281 @@
+{
+  "checkpoint": "/home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/round_2500/WholeBodyTracking/20261125_155645-g1_loaded_4d_stage2_vxh-locomotion/model_08496.pt",
+  "checkpoint_iteration": 8496,
+  "additional_updates": 2500,
+  "criteria_sha256": "41065152d20a4bceb5503f66c7a7e5501a3540a109f58f1570fef99e8086060c",
+  "targets": [
+    {
+      "target": [
+        0.1,
+        0.0,
+        0.0,
+        0.73
+      ],
+      "trials": 2,
+      "successes": 0,
+      "horizon_complete": 0,
+      "measured_mean": null,
+      "mae": null,
+      "p95_error_mean_across_trials": null,
+      "forward_net_displacement_mean": 1.0960170437555605,
+      "pelvis_change_mean": -0.36988691985607147,
+      "double_support_fraction": null,
+      "hand_geometry_fraction": null,
+      "survival_s_mean": 2.91,
+      "resets": 2,
+      "failure_reasons": {
+        "insufficient_steady_time": 2,
+        "vx_mae": 2,
+        "height_mae": 2,
+        "lateral_velocity": 2,
+        "yaw_rate": 2,
+        "hand_box_slip": 2,
+        "physical_failure": 2
+      }
+    },
+    {
+      "target": [
+        0.4,
+        0.0,
+        0.0,
+        0.73
+      ],
+      "trials": 2,
+      "successes": 0,
+      "horizon_complete": 0,
+      "measured_mean": [
+        0.288489305041991,
+        0.05461880883603275,
+        0.3990012447075738,
+        0.7197499632863189
+      ],
+      "mae": [
+        0.35880958242385314,
+        0.143135661538427,
+        0.5549281131894368,
+        0.025532725281012594
+      ],
+      "p95_error_mean_across_trials": [
+        1.0646373659372323,
+        0.4150453522801399,
+        1.8204053521156307,
+        0.1350355520844458
+      ],
+      "forward_net_displacement_mean": 0.9624559698954509,
+      "pelvis_change_mean": -0.3711791932582855,
+      "double_support_fraction": 0.5280433768656716,
+      "hand_geometry_fraction": 0.984375,
+      "survival_s_mean": 3.58,
+      "resets": 2,
+      "failure_reasons": {
+        "vx_mae": 2,
+        "height_mae": 2,
+        "lateral_velocity": 2,
+        "yaw_rate": 2,
+        "box_tilt": 1,
+        "physical_failure": 2
+      }
+    },
+    {
+      "target": [
+        0.8,
+        0.0,
+        0.0,
+        0.73
+      ],
+      "trials": 2,
+      "successes": 0,
+      "horizon_complete": 0,
+      "measured_mean": null,
+      "mae": null,
+      "p95_error_mean_across_trials": null,
+      "forward_net_displacement_mean": 1.15901642143618,
+      "pelvis_change_mean": -0.36632242798805237,
+      "double_support_fraction": null,
+      "hand_geometry_fraction": null,
+      "survival_s_mean": 2.73,
+      "resets": 2,
+      "failure_reasons": {
+        "insufficient_steady_time": 2,
+        "vx_mae": 2,
+        "height_mae": 2,
+        "lateral_velocity": 2,
+        "yaw_rate": 2,
+        "hand_box_slip": 1,
+        "box_tilt": 2,
+        "physical_failure": 2
+      }
+    },
+    {
+      "target": [
+        0.0,
+        0.0,
+        0.0,
+        0.6
+      ],
+      "trials": 2,
+      "successes": 0,
+      "horizon_complete": 1,
+      "measured_mean": [
+        -0.0051939977146057545,
+        -0.03927379909231391,
+        0.01222383218394509,
+        0.6984082701379764
+      ],
+      "mae": [
+        0.014222313386598627,
+        0.04131488784720567,
+        0.07954967022574813,
+        0.10033229214463454
+      ],
+      "p95_error_mean_across_trials": [
+        0.06209342619404196,
+        0.230762621108442,
+        0.19645723626017564,
+        0.10561751127243041
+      ],
+      "forward_net_displacement_mean": 0.08833368630319507,
+      "pelvis_change_mean": -0.19207318127155304,
+      "double_support_fraction": 0.9434180138568129,
+      "hand_geometry_fraction": 1.0,
+      "survival_s_mean": 13.39,
+      "resets": 1,
+      "failure_reasons": {
+        "height_mae": 2,
+        "height_response": 1,
+        "lateral_velocity": 1,
+        "double_support": 1,
+        "box_tilt": 1,
+        "physical_failure": 1
+      }
+    },
+    {
+      "target": [
+        0.0,
+        0.0,
+        0.0,
+        0.69
+      ],
+      "trials": 2,
+      "successes": 1,
+      "horizon_complete": 1,
+      "measured_mean": [
+        -0.008376716677433253,
+        -0.03808933074523219,
+        -0.0005999699373847736,
+        0.7042891973940639
+      ],
+      "mae": [
+        0.01701584757093965,
+        0.04092968502387791,
+        0.08988106843504201,
+        0.01944822098641058
+      ],
+      "p95_error_mean_across_trials": [
+        0.061992859141901134,
+        0.24340998521074653,
+        0.2553098898380995,
+        0.029387483000755305
+      ],
+      "forward_net_displacement_mean": 0.07705164958747943,
+      "pelvis_change_mean": -0.20815584063529968,
+      "double_support_fraction": 0.944078947368421,
+      "hand_geometry_fraction": 0.9978070175438596,
+      "survival_s_mean": 13.08,
+      "resets": 1,
+      "failure_reasons": {
+        "height_mae": 1,
+        "lateral_velocity": 1,
+        "double_support": 1,
+        "box_tilt": 1,
+        "physical_failure": 1
+      }
+    },
+    {
+      "target": [
+        0.0,
+        0.0,
+        0.0,
+        0.8
+      ],
+      "trials": 2,
+      "successes": 0,
+      "horizon_complete": 0,
+      "measured_mean": [
+        -0.02812508631661772,
+        -0.05767788075760459,
+        0.0181781012388885,
+        0.7122082003040358
+      ],
+      "mae": [
+        0.03412782423846749,
+        0.059159064286588854,
+        0.09126494906893907,
+        0.08779181161689312
+      ],
+      "p95_error_mean_across_trials": [
+        0.09284993894398197,
+        0.391081216931343,
+        0.2699995286762714,
+        0.09369068294763563
+      ],
+      "forward_net_displacement_mean": -0.18724559227426665,
+      "pelvis_change_mean": -0.35724928975105286,
+      "double_support_fraction": 0.9004163230038098,
+      "hand_geometry_fraction": 0.9836072817249912,
+      "survival_s_mean": 13.170000000000002,
+      "resets": 2,
+      "failure_reasons": {
+        "vx_mae": 1,
+        "height_mae": 2,
+        "lateral_velocity": 2,
+        "height_response": 2,
+        "double_support": 1,
+        "physical_failure": 2
+      }
+    }
+  ],
+  "track": [
+    {
+      "motion": "continuous_grasped_squat_stand.npz",
+      "completed": 2,
+      "trials": 2,
+      "body_object_mae": [
+        0.04809286631643772,
+        0.0600569024682045
+      ]
+    },
+    {
+      "motion": "loaded_locomotion.npz",
+      "completed": 2,
+      "trials": 2,
+      "body_object_mae": [
+        0.05854766629636288,
+        0.097315464168787
+      ]
+    },
+    {
+      "motion": "repeated_grasped_squat_stand.npz",
+      "completed": 2,
+      "trials": 2,
+      "body_object_mae": [
+        0.047271644696593285,
+        0.06021257862448692
+      ]
+    }
+  ],
+  "task_success_fraction": 0.08333333333333333,
+  "track_completion_fraction": 1.0,
+  "screening_score": 9.39898803685374,
+  "track_error_ratio_to_stage1": 1.4294040256177396,
+  "no_response": false,
+  "severe_track_loss": false,
+  "continuous": {
+    "task_success_fraction": 0.0,
+    "completion_fraction": 0.0,
+    "trials": 2
+  },
+  "continuous_status": "evaluated",
+  "decision": "continue_within_budget",
+  "decision_reason": "finite evaluated rollout; short nonconvergence is not a stop condition"
+}

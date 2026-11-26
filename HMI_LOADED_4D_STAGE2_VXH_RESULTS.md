@@ -74,3 +74,24 @@ The sequential continuation script is already waiting in screen session **hmi-vx
 **Not yet completed:** cumulative1000 short-training evaluation, final10 trials per target, continuous control, and final10-trial Track retention. No VXH checkpoint is recommended as a usable controller yet. `model.pt` is a recovery artifact; the103-update copy is a failed diagnostic comparison. No higher speed, lower height, or vx+h combination is claimed.
 
 Training/continuation/target/sequence/Track/Viser/TensorBoard commands and recovery examples are in README. First implementation commit: `c354892`; subsequent result/runner changes are recorded by Git history. Ordinary push targets `origin/feature/loaded-4d` and preserves remote history.
+
+## 2026-11-26: 2500-update evaluation, startup crash and recovery
+
+2500 additional updates completed (`round_2500/model_08496.pt`). Six fixed targets, two trials each:
+
+| vx / h | Success | Mean survival (s) |
+|---|---:|---:|
+| .1 / .73 | 0/2 | 2.91 |
+| .4 / .73 | 0/2 | 3.58 |
+| .8 / .73 | 0/2 | 2.73 |
+| 0 / .60 | 0/2 | 13.39 |
+| 0 / .69 | 1/2 | 13.08 |
+| 0 / .80 | 0/2 | 13.17 |
+
+The .60 and .80 height commands produced mean measured heights about .698 and .712 m: longer survival is not correct height control. The .4 m/s target had vx MAE .359 m/s and still failed. Track completed2/2 for each clip; locomotion object MAE increased to .0973 m. Continuous control completed0/2 and passed0/2. The .69 result is one successful trial, not a reliable controller. [Full small summary](docs/loaded_4d_vxh/updates_2500_summary.json).
+
+At **01:22:32 CST**, Python PID1554115 segfaulted during launch of `round_4000`, before creating a training run/config/checkpoint or completing an update. Kernel journal confirms the native crash inside python3.11. This was neither an evaluation guard stop nor budget exhaustion. The old driver exited on the child error but left `progress.json` and the segment ledger showing training/running. Original logs lacked a Python stack; the specific dependency/root cause remains unconfirmed.
+
+On user status inspection at16:00, no training/driver process remained. The2500 checkpoint passed finite network/normalizer checks, retained both optimizers at step50000 and std mean .12408, and CUDA worked. Recovery now records failed exits and signal codes, enables Python faulthandler, reuses matching completed evaluation, preserves failed directories under new retry names, and prevents duplicate continuation drivers. Five relevant runner tests passed, including exit139 propagation and exact update accounting.
+
+Resumed the same experiment at **16:03**, screen `hmi-vxh-recovery`, PID1617053, 8192env, segment `round_4000_retry_20261126_160321`; optimizer load and actual PPO updates8496–8498 were confirmed. The target remains cumulative4000, total budget15000. No reward/threshold/physics/policy changes were made. Native-crash recurrence is not ruled out by this successful restart; new failures will have accurate status and additional diagnostics. [Crash/recovery record](docs/loaded_4d_vxh/recovery_20261126.json).

@@ -532,3 +532,10 @@ I006 后续实测：累计103 updates的固定副本 model_06100 在六目标各
 基于真实响应和Track设置诊断停止条件，结束后候选每目标/Track各10trial，连续评估须先有稳态响应。
 最终56项针对性CPU回归通过（53项任务/恢复/Viser，加3项Viser-before-Isaac启动回归）；真实JSON验证筛查逻辑不会将跌倒的瞬时速度当成目标响应。
 首批实施commit c354892。最终Gen能力与连续控制仍未通过，不把正在运行的训练写成已完成策略。
+
+I007（2026-11-26）：累计2500 updates及评估完成，Gen六目标中只有h=.69为1/2，其余0/2；
+三Track各2/2，连续0/2，仍未成为可靠控制策略。01:22:32启动round_4000时Python发生SIGSEGV，
+新段0 updates，kernel确认；原脚本退出却遗留running状态。核验2500checkpoint网络/normalizer有限、
+optimizer step50000、CUDA可用后，修复退出状态记录、启用faulthandler、复用匹配评估、保留失败目录及
+单driver锁；5项相关脚本回归通过。16:03在hmi-vxh-recovery中以8192env正常恢复optimizer/std/normalizer，
+已观察到真实更新；继续至累计4000，预算15000不变。未修改训练奖励/阈值，段错误的底层依赖根因未确认。

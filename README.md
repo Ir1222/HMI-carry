@@ -795,3 +795,17 @@ This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
 ## Acknowledgements
 
 This project is built on [Holosoma](https://github.com/amazon-far/holosoma).
+
+### VXH 分段恢复状态更新（2026-11-26）
+
+2500-update评估已完成；下一段启动于01:22发生Python段错误，未产生新updates。
+已从`round_2500`的`model_08496.pt`正常恢复到`round_4000_retry_20261126_160321`，
+当前screen为`hmi-vxh-recovery`。新脚本在进程异常退出时记录`failed`和exit code，
+启用`PYTHONFAULTHANDLER`；恢复时复用checkpoint/criteria匹配的完整评估，失败段不会被覆盖。
+恢复功能通过5项脚本测试，且已核对实际optimizer加载与PPO更新；段错误底层原因仍未确定。
+
+```bash
+tail -f /home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/round_4000_retry_20261126_160321.log
+cat /home/han/pyx/HMI_clean_runs/loaded_4d/stage2_vxh/progress.json
+screen -ls
+```
